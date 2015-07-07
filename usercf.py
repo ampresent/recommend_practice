@@ -23,6 +23,15 @@ class UserCF:
                 self.user_item[line[0]].add(line[1])
 
     def train(self):
+        # Because user_user matrix is sparse, this algorithm does speed up usercf
+        # The plain algorithm O(U*C) where C is total number of users' collections
+        #       O(U^2 * c) = O(U^2 * C/U) = O(U*C), and it's not accurate, because
+        #       the complexity of intersection of two sets is slightly greater than O(c)
+        # The new algorithm O(C^2/I)
+        #       O(I * i^2) where i is average number of collectors of an item
+        #      =O(I * C*C/I/I) = O(C*C/I)
+        # When I*U > C, which means sparse, the new algorithm is faster!!!
+
         # Rehash from origin data set
         for item, v in self.item_user.iteritems():
             for user in v:
