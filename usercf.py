@@ -26,9 +26,6 @@ class UserCF:
         # Rehash from origin data set
         for item, v in self.item_user.iteritems():
             for user in v:
-                if user not in self.N:
-                    self.N[user] = 0
-                self.N[user] += 1
                 if user not in self.user_user:
                     self.user_user[user] = dict()
                 for user2 in v:
@@ -39,7 +36,7 @@ class UserCF:
                         self.user_user[user][user2] += 1
         for u, vw in self.user_user:
             for v, w in vw:
-                self.user_user[u][v] /= math.sqrt(self.N[u]*self.N[v])
+                self.user_user[u][v] /= math.sqrt(len(self.user_item[u])*len(self.user_item[v]))
 
     def recommend(self, target, K):
         interacted_items = self.user_item[target]

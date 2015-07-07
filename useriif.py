@@ -23,6 +23,7 @@ class UserCF:
                 self.user_item[line[0]].add(line[1])
 
     def train(self):
+        # Rehash from origin data set
         for item, v in self.item_user.iteritems():
             for user in v:
                 if user not in self.N:
@@ -31,26 +32,27 @@ class UserCF:
                 if user not in self.user_user:
                     self.user_user[user] = dict()
                 for user2 in v:
-                    if user2 not in self.user_user[user]:
-                        self.user_user[user][user2] = 0
-                    self.user_user[user][user2] += 1
-        for u in self.user_item.keys():
-            if u in self.user_user:
-                for v in self.user_item.keys():
-                    if v in self.user_user[u]:
-                        self.user_user[u][v] /= math.sqrt(self.N[u]*self.N[v])
+                    if user2 != user:
+                        if user2 not in self.user_user[user]:
+                            # The W matrix
+                            self.user_user[user][user2] = 0
+                        self.user_user[user][user2] += 1
+        for u, vw in self.user_user:
+            for v, w in vw:
+                self.user_user[u][v] /= math.sqrt(self.N[u]*self.N[v])
 
     def recommend(self, target, K):
         interacted_items = self.user_item[target]
-        for v, wuv in sorted(self.user_user[target].items(), key=itemgetter(1), reverse=True)[0:K]:
+        # Only refer to top K related user, K is not the bigger the better
+        for v, w in sorted(interacted_items(), key=itemgetter(1), reverse=True)[0:K]:
             for item in self.user_item[v]:
+                # Don't recommend what's already known to me
                 if item not in interacted_items:
                     if item not in self.rank:
                         self.rank[item] = 0
-                    self.rank[item] += wu
-        print self.rank
+                    self.rank[item] += w
         self.rank = sorted(self.rank)
-        return sorted(self.rank)
+        return self.rank
 
 if __name__ == '__main__':
     usercf = UserCF()
