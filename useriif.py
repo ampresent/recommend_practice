@@ -34,14 +34,14 @@ class UserIIF:
                             # The W matrix
                             self.user_user[user][user2] = 0
                         self.user_user[user][user2] += 1.0 / math.log(1 + len(self.item_user[item]))
-        for u, vw in self.user_user:
-            for v, w in vw:
+        for u, vw in self.user_user.iteritems():
+            for v, w in vw.iteritems():
                 self.user_user[u][v] /= math.sqrt(len(self.user_item[u])*len(self.user_item[v]))
 
     def recommend(self, target, k):
         interacted_items = self.user_item[target]
         # Only refer to top K related user, k is not the bigger the better
-        for v, w in sorted(interacted_items(), key=itemgetter(1), reverse=True)[0:k]:
+        for v, w in sorted(self.user_user[target].items(), key=itemgetter(1), reverse=True)[0:k]:
             for item in self.user_item[v]:
                 # Don't recommend what's already known to me
                 if item not in interacted_items:
