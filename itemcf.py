@@ -1,12 +1,13 @@
 __author__ = 'wuyihao'
-from operator import itemgetter
+import operator
+
 import math
 
-class UserIIF:
+class ItemCF:
     def __init__(self):
         self.user_item = {}
         self.item_user = {}
-        self.user_user = {}
+        self.item_item = {}
         self.rank = {}
         self.N = {}
 
@@ -24,35 +25,29 @@ class UserIIF:
 
     def train(self):
         # Rehash from origin data set
-        for item, v in self.item_user.iteritems():
-            for user in v:
-                if user not in self.user_user:
-                    self.user_user[user] = dict()
-                for user2 in v:
-                    if user2 != user:
-                        if user2 not in self.user_user[user]:
-                            # The W matrix
-                            self.user_user[user][user2] = 0
-                        self.user_user[user][user2] += 1.0 / math.log(1 + len(self.item_user[item]))
-        for u, vw in self.user_user:
-            for v, w in vw:
-                self.user_user[u][v] /= math.sqrt(len(self.user_item[u])*len(self.user_item[v]))
+        for u in self.item_user.iterkeys():
+            if u not in self.item_item:
+                self.item_item[u] = dict()
+            for v in self.item_user.iterkeys():
+                if u != v:
+                    if v not in self.item_item[u]:
+                        self.item_item[u][v] = 0
+                    self.item_item[u][v] += 1.0 * len(self.item_user[u] & self.item_user[v])\
+                        / math.sqrt((len(self.item_user[u]) * len(self.item_user[v])))
 
     def recommend(self, target, k):
         interacted_items = self.user_item[target]
-        # Only refer to top K related user, k is not the bigger the better
-        for v, w in sorted(interacted_items(), key=itemgetter(1), reverse=True)[0:k]:
-            for item in self.user_item[v]:
-                # Don't recommend what's already known to me
-                if item not in interacted_items:
-                    if item not in self.rank:
-                        self.rank[item] = 0
-                    self.rank[item] += w
-        self.rank = sorted(self.rank)
+        for u in interacted_items:
+            for v, w in sorted(self.item_item[u].items(), key=operator.itemgetter(1), reverse=True)[0:k]:
+                if v not in interacted_items:
+                    if v not in self.rank:
+                        self.rank[v] = 0
+                    self.rank[v] += w
+        print self.rank
         return self.rank
 
 if __name__ == '__main__':
-    useriif = UserIIF()
-    useriif.read_from_file('/tmp/try')
-    useriif.train()
-    useriif.recommend(3, 2)
+    itemcf = ItemCF()
+    itemcf.read_from_file('/tmp/try')
+    itemcf.train()
+    itemcf.recommend(3, 2)
