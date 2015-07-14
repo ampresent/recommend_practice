@@ -47,22 +47,20 @@ class PersonalRank:
                    sorted(self._rank.iteritems(), key=operator.itemgetter(1), reverse=True)[0:k])
 
     def verify(self, predicted):
-        s = 0
-        c = 0
+        m = 0
+        c1 = 0
+        c2 = 0
         for u in self.test.iterkeys():
             if u in predicted:
-                m = 0
-                # For u, Predicted & Happened ratio Predicted
                 for p in predicted[u]:
                     if p in self.test[u]:
                         m += 1
-                # The numerator
-                s += 1.0 * m / len(predicted[u])
-                # The denominator
-                c += 1
-        # For all, average
-        return 1.0 * s / c
+                c1 += len(predicted[u])
+                c2 += len(self.test.keys())
 
+        accuracy = 1.0 * m / c1
+        recall = 1.0 * m / c2
+        return accuracy, recall
 
 class Loader:
     def __init__(self, mapp, test):
@@ -124,5 +122,5 @@ if __name__ == '__main__':
     for i in list(set(pr.test.iterkeys()) & set(pr.map.iterkeys())):
         pr.personal_rank(0.2, i)
         predicts[i] = pr.predict(5)
-    precise = pr.verify(predicts)
-    print 'Precise %f' % precise
+    precise, recall = pr.verify(predicts)
+    print 'Precise %f   Recall %f' % (precise, recall)
