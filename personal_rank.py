@@ -29,14 +29,14 @@ class PersonalRank:
                 print sorted(self._rank.values(), reverse=True)[0:5]
                 time.sleep(0.1)
             tmp = dict.fromkeys(self.map.iterkeys(), 0.0)
-            for v in self.map.iterkeys():
-                for u in self.map[v]:
+            # All the other options have the probability: d
+            # The option to start again on 's' is : 1 - d
+            for u, vv in self.map.iteritems():
+                for v in vv:
                     tmp[v] += 1.0 * d * self._rank[u] / len(self.map[u])
-                # All the other options have the probability: d
-                # The option to start again on 's' is : 1 - d
-                tmp[s] += 1 - d
+            tmp[s] += 1 - d
             # Quadratic sum as the error ratio
-            delta = reduce(operator.add, map(lambda x, y: (x-y)*(x-y), tmp.itervalues(), self._rank.itervalues()))
+            delta = sum(map(lambda x, y: (x-y)*(x-y), tmp.itervalues(), self._rank.itervalues()))
             self._rank = tmp
             if delta < self._epsilon:
                 break
@@ -47,21 +47,37 @@ class PersonalRank:
                    sorted(self._rank.iteritems(), key=operator.itemgetter(1), reverse=True)[0:k])
 
     def verify(self, predicted):
-        m = 0
+        s = 0
         c = 0
         for u in self.test.iterkeys():
             if u in predicted:
-                c += 1
+                m = 0
                 # For u, Predicted & Happened ratio Predicted
-                m += len(set(predicted[u]) & self.test[u]) / (1.0 * len(predicted[u]))
+                for p in predicted[u]:
+                    if p in self.test[u]:
+                        m += 1
+                # The numerator
+                s += 1.0 * m / len(predicted[u])
+                # The denominator
+                c += 1
         # For all, average
-        return 1.0 * m / c
+        return 1.0 * s / c
 
 
 class Loader:
-    def __init__(self, map, test):
-        self._map = map
+    def __init__(self, mapp, test):
+        self._map = mapp
         self._test = test
+        self._hash = {}
+        self._re_hash = {}
+        self._hash_count = 0
+
+    def hash_put(self, u):
+        if u not in self._hash:
+            self._hash_count += 1
+            self._hash[u] = self._hash_count
+            self._re_hash[self._hash_count] = u
+        return self._hash[u]
 
     def load_train(self, day):
         db_dir = 'experiments'
@@ -70,6 +86,10 @@ class Loader:
         for d in events:
             u = d['actor']
             v = d['repo']
+
+            u = self.hash_put(u)
+            v = self.hash_put(v)
+
             if v not in self._map:
                 self._map[v] = set()
             self._map[v].add(u)
@@ -85,6 +105,11 @@ class Loader:
         for d in events:
             u = d['actor']
             v = d['repo']
+
+            # Using integer as dict index is faster
+            u = self.hash_put(u)
+            v = self.hash_put(v)
+
             if u not in self._test:
                 self._test[u] = set()
             self._test[u].add(v)
