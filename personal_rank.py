@@ -4,6 +4,7 @@ import gzip
 import pickle
 import time
 import operator
+import math
 
 
 class PersonalRank:
@@ -31,9 +32,9 @@ class PersonalRank:
             tmp = dict.fromkeys(self.map.iterkeys(), 0.0)
             # All the other options have the probability: d
             # The option to start again on 's' is : 1 - d
-            for u, vv in self.map.iteritems():
-                for v in vv:
-                    tmp[v] += 1.0 * d * self._rank[u] / len(self.map[u])
+            for u, vw in self.map.iteritems():
+                for v,w in vw.iteritems():
+                    tmp[v] += 1.0 * d * self._rank[u] * w
             tmp[s] += 1 - d
             # Quadratic sum as the error ratio
             delta = sum(map(lambda x, y: (x-y)*(x-y), tmp.itervalues(), self._rank.itervalues()))
@@ -63,12 +64,14 @@ class PersonalRank:
         return accuracy, recall
 
 class Loader:
-    def __init__(self, mapp, test):
+    def __init__(self, mapp, test, weighting='norm', arg=()):
         self._map = mapp
         self._test = test
         self._hash = {}
         self._re_hash = {}
         self._hash_count = 0
+        self._weighting = weighting
+        self._arg_ = arg
 
     def hash_put(self, u):
         if u not in self._hash:
@@ -81,20 +84,40 @@ class Loader:
         db_dir = 'experiments'
         data_file = '{}/watch_day{}.pkl.gz'.format(db_dir, day)
         events = pickle.load(gzip.open(data_file, 'r'))
+        coefficient = 0
+
+        # Initialize weighting method
+        if self._weighting == 'time':
+            theta = self._arg_
+            mu = time.time()
+            coefficient = 1.0 / (theta * math.sqrt(math.pi * 2.0))
         for d in events:
             u = d['actor']
             v = d['repo']
-
             u = self.hash_put(u)
             v = self.hash_put(v)
-
             if v not in self._map:
-                self._map[v] = set()
-            self._map[v].add(u)
-
+                self._map[v] = dict()
             if u not in self._map:
-                self._map[u] = set()
-            self._map[u].add(v)
+                self._map[u] = dict()
+
+            if self._weighting == 'time':
+                # Happening time
+                x = time.mktime(time.strptime(d['created_at'], '%Y-%m-%dT%H:%M:%SZ'))
+                # Gaussian distribution
+                w = coefficient * math.exp(-(x-mu)*(x-mu)/(2.0*theta*theta))
+            elif self._weighting == 'norm':
+                w = 1
+            self._map[v][u] = w
+            self._map[u][v] = w
+
+        # It seems very slow
+        for u,vw in self._map.iteritems():
+            s = 1.0 * sum(self._map[u])
+            for v,w in vw.items():
+                self._map[u][v] /= s
+
+
 
     def load_test(self, day):
         db_dir = 'experiments'
@@ -114,10 +137,11 @@ class Loader:
 
 if __name__ == '__main__':
     pr = PersonalRank(1.0)
-    ld = Loader(pr.map, pr.test)
-    for i in range(7):
+    ld = Loader(pr.map, pr.test, 'norm', ())
+    for i in range(0,7):
         ld.load_train(i)
-    ld.load_test(7)
+    for i in range(7,8):
+        ld.load_test(i)
     predicts = {}
     for i in list(set(pr.test.iterkeys()) & set(pr.map.iterkeys())):
         pr.personal_rank(0.2, i)
