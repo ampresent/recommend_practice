@@ -16,7 +16,7 @@ class PersonalRank:
         self.test = dict()
         self._s = None
 
-    # TODO randomize, weight by time, How to separate two sets
+    # TODO randomize, weight by time
 
     def personal_rank(self, d, s):
         self._s = s
@@ -44,8 +44,12 @@ class PersonalRank:
 
     def predict(self, k):
         # Top K ranking candidates
-        return map(operator.itemgetter(0),
+        result = map(operator.itemgetter(0),
                    sorted(self._rank.iteritems(), key=operator.itemgetter(1), reverse=True)[0:k])
+        # TODO it seems the recommend results covers both user and respositories
+        if self._s in result:
+            result.remove(self._s)
+        return result
 
     def verify(self, predicted):
         m = 0
@@ -89,7 +93,9 @@ class Loader:
         # Initialize weighting method
         if self._weighting == 'time':
             theta = self._arg_
-            mu = time.time()
+            #mu = time.time()
+            # TODO the data sets are too far from now, so it's not accurate
+            mu = time.mktime(time.strptime('2012-01-08T23:59:19Z','%Y-%m-%dT%H:%M:%SZ'))
             coefficient = 1.0 / (theta * math.sqrt(math.pi * 2.0))
         for d in events:
             u = d['actor']
@@ -145,6 +151,7 @@ if __name__ == '__main__':
     predicts = {}
     for i in list(set(pr.test.iterkeys()) & set(pr.map.iterkeys())):
         pr.personal_rank(0.2, i)
-        predicts[i] = pr.predict(5)
+        # TOO much predictions reduce the precision!
+        predicts[i] = pr.predict(3)
     precise, recall = pr.verify(predicts)
     print 'Precise %f   Recall %f' % (precise, recall)
