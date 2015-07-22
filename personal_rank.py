@@ -45,17 +45,13 @@ class PersonalRank:
     def predict(self, k):
         # Top K ranking candidates
         result = map(operator.itemgetter(0),
-                     sorted(filter(lambda x: x[0] < 0 and x[1] > 0.0, self._rank.iteritems()),
+                     sorted(filter(lambda f: f[0] < 0 and f[1] > 0.0 and f[0] not in self.map[self._s],
+                                   self._rank.iteritems()),
                             key=operator.itemgetter(1), reverse=True)[0:k])
         # TODO it seems the recommend results covers both user and respositories
         '''
         if self._s in result:
             result.remove(self._s)
-        '''
-        '''
-        if len(result) > 0:
-            print 'DEBUG', self._s
-            print result[0:3]
         '''
         return result
 
@@ -83,27 +79,24 @@ class Loader:
     def __init__(self, mapp, test, weighting='norm', arg=()):
         self._map = mapp
         self._test = test
-        self._hash = {}
-        '''
-        self._re_hash = {}
-        '''
+        self.hash = {}
+        self.re_hash = {}
         self._hash_count_ACTOR = 0
         self._hash_count_REPO = 0
         self._weighting = weighting
         self._arg_ = arg
 
     def hash_put(self, u, hash_type):
-        if u not in self._hash:
+        if u not in self.hash:
             if hash_type == Loader.ACTOR:
                 self._hash_count_ACTOR += 1
-                self._hash[u] = self._hash_count_ACTOR
+                self.hash[u] = self._hash_count_ACTOR
+                self.re_hash[self._hash_count_ACTOR] = u
             elif hash_type == Loader.REPO:
                 self._hash_count_REPO -= 1
-                self._hash[u] = self._hash_count_REPO
-            '''
-            self._re_hash[self._hash_count] = u
-            '''
-        return self._hash[u]
+                self.hash[u] = self._hash_count_REPO
+                self.re_hash[self._hash_count_REPO] = u
+        return self.hash[u]
 
     def load_train(self, day):
         db_dir = 'experiments'
@@ -121,6 +114,9 @@ class Loader:
         for d in events:
             u = d['actor']
             v = d['repo']
+            '''
+            print u, '-->', v
+            '''
             u = self.hash_put(u, Loader.ACTOR)
             v = self.hash_put(v, Loader.REPO)
             if v not in self._map:
@@ -163,14 +159,19 @@ class Loader:
 if __name__ == '__main__':
     pr = PersonalRank(0.1)
     ld = Loader(pr.map, pr.test, 'norm', ())
-    for i in range(0, 2):
+    for i in range(0, 4):
         ld.load_train(i)
-    for i in range(2, 8):
+    for i in range(4, 8):
         ld.load_test(i)
     predicts = {}
     for i in list(set(pr.test.iterkeys()) & set(pr.map.iterkeys())):
         pr.personal_rank(0.2, i)
         # TOO much predictions reduce the precision!
         predicts[i] = pr.predict(3)
+        '''
+        if len(predicts[i]) > 0:
+            print ld.re_hash[i], [ld.re_hash[x] for x in predicts[i]]
+            time.sleep(1)
+        '''
     precise, recall = pr.verify(predicts)
     print 'Precise %f   Recall %f' % (precise, recall)
