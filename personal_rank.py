@@ -5,6 +5,7 @@ import pickle
 import time
 import operator
 import math
+import sys
 
 
 class PersonalRank:
@@ -157,21 +158,18 @@ class Loader:
             self._test[u].add(v)
 
 if __name__ == '__main__':
-    pr = PersonalRank(0.1)
+    pr = PersonalRank(1e-8)
     ld = Loader(pr.map, pr.test, 'norm', ())
-    for i in range(0, 4):
+    for i in range(0, int(sys.argv[1])):
         ld.load_train(i)
-    for i in range(4, 8):
+    for i in range(int(sys.argv[2]), int(sys.argv[3])):
         ld.load_test(i)
+
     predicts = {}
     for i in list(set(pr.test.iterkeys()) & set(pr.map.iterkeys())):
-        pr.personal_rank(0.2, i)
+        pr.personal_rank(0.1, i)
         # TOO much predictions reduce the precision!
         predicts[i] = pr.predict(3)
-        '''
-        if len(predicts[i]) > 0:
-            print ld.re_hash[i], [ld.re_hash[x] for x in predicts[i]]
-            time.sleep(1)
-        '''
+
     precise, recall = pr.verify(predicts)
     print 'Precise %f   Recall %f' % (precise, recall)
