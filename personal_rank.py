@@ -33,7 +33,7 @@ class PersonalRank:
             # All the other options have the probability: d
             # The option to start again on 's' is : 1 - d
             for u, vw in self.map.iteritems():
-                for v,w in vw.iteritems():
+                for v, w in vw.iteritems():
                     tmp[v] += 1.0 * d * self._rank[u] * w
             tmp[s] += 1 - d
             # Quadratic sum as the error ratio
@@ -45,10 +45,18 @@ class PersonalRank:
     def predict(self, k):
         # Top K ranking candidates
         result = map(operator.itemgetter(0),
-                   sorted(self._rank.iteritems(), key=operator.itemgetter(1), reverse=True)[0:k])
+                     sorted(filter(lambda x: x[0] < 0 and x[1] > 0.0, self._rank.iteritems()),
+                            key=operator.itemgetter(1), reverse=True)[0:k])
         # TODO it seems the recommend results covers both user and respositories
+        '''
         if self._s in result:
             result.remove(self._s)
+        '''
+        '''
+        if len(result) > 0:
+            print 'DEBUG', self._s
+            print result[0:3]
+        '''
         return result
 
     def verify(self, predicted):
@@ -67,21 +75,34 @@ class PersonalRank:
         recall = 1.0 * m / c2
         return accuracy, recall
 
+
 class Loader:
+    ACTOR = 0
+    REPO = 1
+
     def __init__(self, mapp, test, weighting='norm', arg=()):
         self._map = mapp
         self._test = test
         self._hash = {}
+        '''
         self._re_hash = {}
-        self._hash_count = 0
+        '''
+        self._hash_count_ACTOR = 0
+        self._hash_count_REPO = 0
         self._weighting = weighting
         self._arg_ = arg
 
-    def hash_put(self, u):
+    def hash_put(self, u, hash_type):
         if u not in self._hash:
-            self._hash_count += 1
-            self._hash[u] = self._hash_count
+            if hash_type == Loader.ACTOR:
+                self._hash_count_ACTOR += 1
+                self._hash[u] = self._hash_count_ACTOR
+            elif hash_type == Loader.REPO:
+                self._hash_count_REPO -= 1
+                self._hash[u] = self._hash_count_REPO
+            '''
             self._re_hash[self._hash_count] = u
+            '''
         return self._hash[u]
 
     def load_train(self, day):
@@ -100,8 +121,8 @@ class Loader:
         for d in events:
             u = d['actor']
             v = d['repo']
-            u = self.hash_put(u)
-            v = self.hash_put(v)
+            u = self.hash_put(u, Loader.ACTOR)
+            v = self.hash_put(v, Loader.REPO)
             if v not in self._map:
                 self._map[v] = dict()
             if u not in self._map:
@@ -118,12 +139,10 @@ class Loader:
             self._map[u][v] = w
 
         # It seems very slow
-        for u,vw in self._map.iteritems():
+        for u, vw in self._map.iteritems():
             s = 1.0 * sum(self._map[u])
-            for v,w in vw.items():
+            for v, w in vw.items():
                 self._map[u][v] /= s
-
-
 
     def load_test(self, day):
         db_dir = 'experiments'
@@ -134,19 +153,19 @@ class Loader:
             v = d['repo']
 
             # Using integer as dict index is faster
-            u = self.hash_put(u)
-            v = self.hash_put(v)
+            u = self.hash_put(u, Loader.ACTOR)
+            v = self.hash_put(v, Loader.REPO)
 
             if u not in self._test:
                 self._test[u] = set()
             self._test[u].add(v)
 
 if __name__ == '__main__':
-    pr = PersonalRank(1.0)
+    pr = PersonalRank(0.1)
     ld = Loader(pr.map, pr.test, 'norm', ())
-    for i in range(0,7):
+    for i in range(0, 2):
         ld.load_train(i)
-    for i in range(7,8):
+    for i in range(2, 8):
         ld.load_test(i)
     predicts = {}
     for i in list(set(pr.test.iterkeys()) & set(pr.map.iterkeys())):

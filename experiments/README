@@ -1,0 +1,3 @@
+dictionary keys:
+  actor: login name of the watcher
+  repo: full name of the watched repository
