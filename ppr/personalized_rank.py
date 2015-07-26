@@ -158,11 +158,15 @@ class Loader:
             self._test[u].add(v)
 
 if __name__ == '__main__':
-    pr = PersonalRank(1e-8)
-    ld = Loader(pr.map, pr.test, 'norm', ())
+    pr = PersonalRank(1e-4)
+    if sys.argv[3] == 'time':
+        ld = Loader(pr.map, pr.test, 'time', float(sys.argv[4]))
+    else:
+        ld = Loader(pr.map, pr.test, 'norm', ())
+
     for i in range(0, int(sys.argv[1])):
         ld.load_train(i)
-    for i in range(int(sys.argv[2]), int(sys.argv[3])):
+    for i in range(int(sys.argv[1]), int(sys.argv[2])):
         ld.load_test(i)
 
     predicts = {}
