@@ -61,13 +61,27 @@ def lower_bound(A, d, c):
         old_layer = new_layer
     return lb
 
-'''
-def top_k(A):
-    Va = A.iterkeys()[0:K]
-    lower_bound(A,)
-    for i in range(len(A)):
 
-'''
+def top_k(A, K, lb, theta):
+    lower_bound(A, d, c)
+    # K dummy nodes
+    relevance = dict.fromkeys(A.keys()[0:K], 0)
+    for i in range(len(A)):
+        u = max(lb.iteritems(), key=operator.itemgetter(1))[0]
+        lb.pop(u)
+        ub = upper_bound(u)
+        if ub < theta:
+            return Va
+        else:
+            relevance_u = exact(u, d)
+            if relevance_u > theta:
+                v = min(relevance.iteritems(), key=operator.itemgetter(1))[0]
+                # Replace v with u, whose relevance is greater
+                relevance_u.pop(v)
+                relevance[u] = relevance_u
+                # Refresh theta
+                theta = min(relevance.iteritems(), key=operator.itemgetter(1))[1]
+
 
 if __name__ == '__main__':
     A = {1: {2: 0.6, 3: 0.4}, 2: {3: 0.3, 4: 0.7}, 3: {1: 0.8, 4: 0.2}, 4: {}}
