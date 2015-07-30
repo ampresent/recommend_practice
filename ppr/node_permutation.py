@@ -29,43 +29,49 @@ def node_permutation(A):
                 count[u] -= 1
     return p
 
+"""
+A : adjacent matrix
+doesn't sacrifice time complexity,
+because replace list with binomial tree
+(however,array could be even better, not so handy in python)
+
+d : seeds set
+"""
 def lower_bound(A, d, c):
-    visited = set()
-    lb = {}
-    queue = Queue.Queue()
+    lb = dict.fromkeys(A.iterkeys(), 0)
     for seed, weight in d.iteritems():
-        visited.add(seed)
         lb[seed] = c * weight
-        for v in A[seed]:
-            if v not in visited:
-                visited.add(v)
-                queue.put(v)
+    old_layer = set(d.iterkeys())
+    visited = set(old_layer)
+    # Introduce old_layer and new_layer to enable
+    # transition from one WHOLE layer to another
+    while len(old_layer) > 0:
+        new_layer = set()
 
-    old_layer = []
-    while queue.not_empty():
-        new_layer = []
-        while queue.not_empty():
-            v = queue.get()
-            if v not in lb:
-                lb[v] = 0
-            # The bisection
-            for u in old_layer:
-                if u in A[v]:
-                    lb[v] += A[u][v]*lb[u]
-            lb[v] *= 1 - c
-
-            for vv in A[u]:
-                if vv not in visited:
-                    visited.add(vv)
-                    new_layer.append(vv)
-
+        for u in old_layer:
+            for v in A[u]:
+                if v not in visited:
+                    # TODO A[u][v] or A[v][u]?????
+                    lb[v] += (1-c)*A[u][v]*lb[u]
+                    new_layer.add(v)
         for u in new_layer:
-            queue.put(u)
+            visited.add(u)
+
+        print new_layer
         old_layer = new_layer
+    return lb
 
-
+'''
 def top_k(A):
     Va = A.iterkeys()[0:K]
     lower_bound(A,)
     for i in range(len(A)):
 
+'''
+
+if __name__ == '__main__':
+    A = {1: {2: 0.6, 3: 0.4}, 2: {3: 0.3, 4: 0.7}, 3: {1: 0.8, 4: 0.2}, 4: {}}
+    d = {1: 0.9, 4: 0.1}
+    c = 0.2
+    lb = lower_bound(A, d, c)
+    print lb
