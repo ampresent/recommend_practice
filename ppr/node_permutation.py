@@ -1,3 +1,5 @@
+# TODO : 1. A'  2. W    3. Q    4. R    5. R^-1     6. g    7. exact(with fx)
+
 import operator
 import Queue
 """
@@ -61,17 +63,44 @@ def lower_bound(A, d, c):
         old_layer = new_layer
     return lb
 
+# Shared by exact and upper_bound
+exact_id1 = 0
 
-def top_k(A, K, lb, theta):
+def exact(u):
+    # Shared by exact and upper_bound
+    global exact_id1
+    for i in range(n):
+
+        exact_i =
+        yield exact_i
+        exact_id1 = exact_i
+
+def upper_bound(u, lbu, sum_lb, n):
+    # Shared by exact and upper_bound
+    global exact_id1
+    ubi = 1 - sum_lb + lbu
+    yield ubi
+
+    # Upper bound _ (i-1)
+    ub_id1 = ubi
+    for i in range(1, n):
+        ub_i = lbu - exact_id1 + ub_id1
+        yield ub_i
+        ub_id1 = ub_i
+
+
+def top_k(A, K, theta):
     lower_bound(A, d, c)
-    # K dummy nodes
+    sum_lb = sum(lb.itervalues())
+    n = len(A)
+    # K dummy nodes, After all, only keeps K of all
     relevance = dict.fromkeys(A.keys()[0:K], 0)
     for i in range(len(A)):
-        u = max(lb.iteritems(), key=operator.itemgetter(1))[0]
+        u, lbu = max(lb.iteritems(), key=operator.itemgetter(1))
         lb.pop(u)
-        ub = upper_bound(u)
+        ub = upper_bound(u, lbu, sum_lb, n)
         if ub < theta:
-            return Va
+            return relevance
         else:
             relevance_u = exact(u, d)
             if relevance_u > theta:
