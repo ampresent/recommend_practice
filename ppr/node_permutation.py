@@ -1,7 +1,7 @@
-# TODO : 1. A'  2. W    3. Q    4. R    5. R^-1     6. g    7. exact(with fx)
+# TODO : 5. R^-1     6. g    7. exact(with fx)
 
 import operator
-import Queue
+import numpy
 """
 A must be bidirected
 """
@@ -111,6 +111,34 @@ def top_k(A, K, theta):
                 # Refresh theta
                 theta = min(relevance.iteritems(), key=operator.itemgetter(1))[1]
 
+def W(A, c):
+    P = node_permutation(A)
+    n = len(A)
+
+    # W has to be tense, so use numpy.array
+    W = numpy.ones((n, n))
+    for i in range(n):
+        pi = P[i]
+        for j in range(n):
+            pj = P[j]
+            if pj in A[pi]:
+                W[i][j] -= A[pi][pj]
+
+def Q(w):
+    n = len(w)
+    # TODO is it slow? And it has side effects???
+    w.transpose()
+    qd = numpy.array(w)
+    q = numpy.zeros((n, n))
+    r = numpy.zeros((n, n))
+    for i in range(n):
+        for j in range(1, i):
+            qd[i] -= w[i].dot(q[j]) * q[j]
+        norm_qdi = numpy.linalg.norm(qd[i])
+        q[i] = qd[i] /  numpy.linalg.norm(qd[i])
+        r[i][i] = norm_qdi
+        for j in range(i+1, n):
+            r[i][j] = w[j].dot(q[i])
 
 if __name__ == '__main__':
     A = {1: {2: 0.6, 3: 0.4}, 2: {3: 0.3, 4: 0.7}, 3: {1: 0.8, 4: 0.2}, 4: {}}
