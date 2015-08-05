@@ -2,6 +2,7 @@
 
 import operator
 import numpy
+from scipy.sparse import *
 """
 A must be bidirected
 """
@@ -111,28 +112,33 @@ def top_k(A, K, theta):
                 # Refresh theta
                 theta = min(relevance.iteritems(), key=operator.itemgetter(1))[1]
 
-def W(A, c):
-    P = node_permutation(A)
-    n = len(A)
-
-    # W has to be tense, so use numpy.array
-    W = numpy.ones((n, n))
-    for i in range(n):
+# A : fake sparse
+# P : fake
+# c : constant
+# n : constant
+# w : coo sparse
+def w(A, P, c, n):
+    # W has to be dense, so use numpy.array
+    # O(|Q|)
+    w = dict()
+    for i in A:
         pi = P[i]
-        for j in range(n):
-            pj = P[j]
-            if pj in A[pi]:
-                W[i][j] -= A[pi][pj]
+        for j in A[pi]:
+            w[i][j] -= A[pi][P[j]]
+    return coo_matrix(w)
 
-def Q(w):
-    n = len(w)
+# w : coo sparse
+# n : constant
+# q :
+# r :
+def q(w, n):
     # TODO is it slow? And it has side effects???
-    w.transpose()
-    qd = numpy.array(w)
+    qd = numpy.array(w.transpose())
     q = numpy.zeros((n, n))
     r = numpy.zeros((n, n))
     for i in range(n):
         for j in range(1, i):
+            # TODO is it very slow???
             qd[i] -= w[i].dot(q[j]) * q[j]
         norm_qdi = numpy.linalg.norm(qd[i])
         q[i] = qd[i] /  numpy.linalg.norm(qd[i])
@@ -140,9 +146,33 @@ def Q(w):
         for j in range(i+1, n):
             r[i][j] = w[j].dot(q[i])
 
+'''
+# Reverse of R
+def Rr(r):
+    n = len(r)
+    rr = numpy.zeros((n, n))
+    for i in xrange(n-1, -1, -1):
+        rr[i][i] = 1.0 / r[i][i]
+        for j in xrange(n-1, i, -1):
+            for
+'''
+
+# q: dense, p: fake, d: sparse
+def g(q, p, d, n):
+    # p reverse
+    pr = numpy.zeros(n)
+    for i in xrange(n):
+        pr[p[i]] = i
+
+    g = numpy.zeros(n)
+    for i in xrange(n):
+        g[i] = q[pr[i]] * d[i]
+
 if __name__ == '__main__':
+    '''
     A = {1: {2: 0.6, 3: 0.4}, 2: {3: 0.3, 4: 0.7}, 3: {1: 0.8, 4: 0.2}, 4: {}}
     d = {1: 0.9, 4: 0.1}
     c = 0.2
     lb = lower_bound(A, d, c)
     print lb
+    '''
