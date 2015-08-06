@@ -7,6 +7,7 @@ import ctypes
 from ctypes import c_double, c_size_t, byref, pointer, POINTER
 import numpy as np
 from numpy.ctypeslib import ndpointer
+from scipy import sparse
 
 # Assume spqr_wrapper.so (or a link to it) is in the same directory as this file
 print __file__
@@ -25,41 +26,57 @@ spqrlib.qr_solve.argtypes = [
         c_size_t,  # A_m
         c_size_t,  # A_n
         ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'), # b_data
-        #ndpointer(dtype=np.float64, ndim=1, flags=('C_CONTIGUOUS', 'WRITEABLE')), # x_data
         ndpointer(dtype=np.int, ndim=1, flags='C_CONTIGUOUS'), # b_row
-        c_size_t  # b_nnz
+        c_size_t,  # b_nnz
+        ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'), # Z_data
+        ndpointer(dtype=np.int, ndim=1, flags='C_CONTIGUOUS'), # Z_row
+        ndpointer(dtype=np.int, ndim=1, flags='C_CONTIGUOUS'), # Z_col
+        ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'), # R_data
+        ndpointer(dtype=np.int, ndim=1, flags='C_CONTIGUOUS'), # R_row
+        ndpointer(dtype=np.int, ndim=1, flags='C_CONTIGUOUS') # R_col
         ]
 spqrlib.qr_solve.restype = None
 
-def qr_solve(A_data, A_row, A_col, A_nnz, A_m, A_n, b_data, b_row, b_nnz):
+def qr_solve(A, b):
     """ Python wrapper to qr_solve """
-    if len(A_data) != len(A_row) != len(A_col) != A_nnz:
-        raise TypeError("A_data, A_row, A_col, A_nnz must agree")
-    if len(b_data) != len(b_row) != b_nnz:
-        raise TypeError("b_data must be A_m long")
 
-    #x_data = np.empty(A_n, dtype=np.float64)
+    Z = sparse.coo_matrix(A.shape, dtype=np.float64)
+    R = sparse.coo_matrix(A.shape, dtype=np.float64)
+
+
+
     spqrlib.qr_solve(
-            np.require(A_data, np.float64, 'C'),
-            np.require(A_row, np.int64, 'C'),
-            np.require(A_col, np.int64, 'C'),
-            A_nnz, A_m, A_n,
-            np.require(b_data, np.float64, 'C'),
-            np.require(b_row, np.int64, 'C'),
-            b_nnz
+            np.require(A.data, np.float64, 'C'),
+            np.require(A.row, np.int, 'C'),
+            np.require(A.col, np.int, 'C'),
+            A.nnz, A.shape[0], A.shape[1],
+            np.require(b.data, np.float64, 'C'),
+            np.require(b.row, np.int, 'C'),
+            b.nnz,
+            np.require(Z.data, np.float64, 'C'),
+            np.require(Z.row, np.int, 'C'),
+            np.require(Z.col, np.int, 'C'),
+            np.require(R.data, np.float64, 'C'),
+            np.require(R.row, np.int, 'C'),
+            np.require(R.col, np.int, 'C')
             )
     print 'Done'
     #return x_data
 
 def main():
     print("Testing qr_solve")
-    A_data = np.array([2, 9, 25], dtype=np.float64)
-    A_row = np.array([0, 1, 2])
-    A_col = np.array([0, 1, 2])
-    b_data = np.array([1, 4], dtype=np.float64)
-    b_row = np.array([0, 2])
+    '''
+    A_data = np.array([5, 1, 5, 9, 1, 2, 4], dtype=np.float64)
+    A_row = np.array([0, 0, 1, 1, 2, 2, 2])
+    A_col = np.array([0, 1, 1, 2, 0, 1, 2])
+    b_data = np.array([4, 2, 1], dtype=np.float64)
+    b_row = np.array([0, 1, 2])
+    '''
+    A = sparse.coo_matrix([[5,1,0],[0,5,9],[1,2,4]], dtype=np.float64)
+    b = sparse.coo_matrix([[4],[2],[1]], dtype=np.float64)
 
-    qr_solve(A_data, A_row, A_col, len(A_data), 3, 3, b_data, b_row, len(b_data))
+    fuck = qr_solve(A, b);
+    print 'return',fuck
     #print(x_data)
 
 if __name__ == "__main__":

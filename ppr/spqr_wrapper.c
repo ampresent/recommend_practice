@@ -4,12 +4,11 @@
 // refers to this as a "cholmod_triplet" format. This is then converted to its
 // "cholmod_sparse" format, which is a CSC matrix.
 
-#include <Python.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "SuiteSparseQR_C.h"
 
-void qr_solve(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz, size_t A_m, size_t A_n, double const *b_data, long const * b_row, size_t b_nnz){
+void qr_solve(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz, size_t A_m, size_t A_n, double const *b_data, long const * b_row, size_t b_nnz, double *Z_data, long *Z_row, long *Z_col, double *R_data, long *R_row, long *R_col){
     // Solves the matrix equation Ax=b where A is a sparse matrix and x and b
     // are dense column vectors. A and b are inputs, x is solved for in the
     // least squares sense using a rank-revealing QR factorization.
@@ -30,12 +29,18 @@ void qr_solve(double const *A_data, long const *A_row, long const *A_col, size_t
     //
     cholmod_common Common, *cc;
 	// Why must it compress ??????
-    cholmod_sparse *A_csc, *b_csc, *Z, *R, *P;
-    cholmod_triplet *A_coo, *b_coo;
-    size_t k;
+    cholmod_sparse *A_csc, *b_csc, *Z_csc, *R_csc;
+    cholmod_triplet *A_coo, *b_coo, *Z_coo, *R_coo;
+	//SuiteSparse_long *P;
+    size_t k, R_nnz, Z_nnz;
     // Helper pointers
-    long *Ai, *Aj, *bi, *bj;
-    double *Ax, *bx;
+    long *Ai, *Aj, *bi, *bj, *Zi, *Zj, *Ri, *Rj;
+    double *Ax, *bx, *Zx, *Rx;
+
+	fprintf(stderr, "A_nnz = %d\n",A_nnz);
+	for (k=0;k<A_nnz;k++){
+		fprintf(stderr, "(%d,%d)\t%f\n",A_row[k],A_col[k],A_data[k]);
+	}
 
     /* start CHOLMOD */
     cc = &Common ;
@@ -89,51 +94,42 @@ void qr_solve(double const *A_data, long const *A_row, long const *A_col, size_t
     //x = SuiteSparseQR_C_backslash_default(A_csc, b, cc);
 	// What About econ???????????
 	
-	for (k=0; k<b_nnz;k++){
-		fprintf(stderr, "%d -> %d\n", k, bx[k]);
-	}
-	int rank = SuiteSparseQR_C(SPQR_ORDERING_DEFAULT, SPQR_DEFAULT_TOL, 0, 0, A_csc, b_csc, NULL, &Z, NULL, &R, &P, NULL, NULL, NULL, cc);
+	int rank = SuiteSparseQR_C(SPQR_ORDERING_DEFAULT, SPQR_DEFAULT_TOL, 0, 0, A_csc, b_csc, NULL, &Z_csc, NULL, &R_csc, NULL/*&P*/, NULL, NULL, NULL, cc);
+	Z_coo = cholmod_l_sparse_to_triplet(Z_csc, cc);
+	R_coo = cholmod_l_sparse_to_triplet(R_csc, cc);
 
-
+	
 	/*
-    // Return values of x
-    xx = x->x;
-    for (k=0; k<A_n; k++) {
-        x_data[k] = xx[k];
-    }
-	*/
+	Zi = Z_coo->i;
+	Zj = Z_coo->j;
+	Zx = Z_coo->x;
+	Z_nnz = Z_coo->nnz;
+	for (k=0; k<Z_nnz;k++){
+		Z_data[k] = Zx[k];
+		Z_row[k] = Zi[k];
+		Z_col[k] = Zj[k];
+	}
 
+	Ri = R_coo->i;
+	Rj = R_coo->j;
+	Rx = R_coo->x;
+	R_nnz = R_coo->nnz;
+	for (k=0; k<R_nnz;k++){
+		R_data[k] = Rx[k];
+		R_row[k] = Ri[k];
+		R_col[k] = Rj[k];
+	}
+	*/
     /* free everything and finish CHOLMOD */
     cholmod_l_free_triplet(&A_coo, cc);
     cholmod_l_free_sparse(&A_csc, cc);
     cholmod_l_free_triplet(&b_coo, cc);
     cholmod_l_free_sparse(&b_csc, cc);
-    cholmod_l_free_sparse(&Z, cc);
-    //cholmod_l_free_sparse(&R, cc);???????
-	// How to free E , or P ????????????? Refer to SPQR/Tcov/qrtest.cpp ??????
-    // cholmod_l_free_sparse(&P, cc);
+    cholmod_l_free_triplet(&Z_coo, cc);
+    cholmod_l_free_sparse(&Z_csc, cc);
+    cholmod_l_free_triplet(&R_coo, cc);
+    cholmod_l_free_sparse(&R_csc, cc);
+	//free(P);
     cholmod_l_finish(cc);
-    return;
+    return 1;
 }
-PyObject* wrap_fact(PyObject* self, PyObject* args)
-{
-  int n, result;
-
-  if (! PyArg_ParseTuple(args, "i:fact", &n))
-    return NULL;
-  result = fact(n);
-  return Py_BuildValue("i", result);
-}
-
-static PyMethodDef exampleMethods[] =
-{
-  {"fact", wrap_fact, METH_VARARGS, "Caculate N!"},
-  {NULL, NULL}
-};
-
-void initexample()
-{
-  PyObject* m;
-  m = Py_InitModule("example", exampleMethods);
-}
-
