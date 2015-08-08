@@ -14,7 +14,7 @@ PyObject *pDict = NULL;
 PyObject *pClass = NULL;
 PyObject *pGetnnz = NULL;
 
-void qr(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz, size_t A_m, size_t A_n, double const *b_data, long const * b_row, size_t b_nnz, PyListObject **Z_data, PyListObject **Z_row, PyListObject **Z_col, PyListObject **R_data, PyListObject **R_row, PyListObject **R_col){
+void qr(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz, size_t A_m, size_t A_n, double const *b_data, long const * b_row, size_t b_nnz, PyListObject *Z_data, PyListObject *Z_row, PyListObject *Z_col, PyListObject* R_data, PyListObject *R_row, PyListObject *R_col){
 	// Solves the matrix equation Ax=b where A is a sparse matrix and x and b
 	// are dense column vectors. A and b are inputs, x is solved for in the
 	// least squares sense using a rank-revealing QR factorization.
@@ -119,40 +119,33 @@ void qr(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz
 	Zj = Z_coo->j;
 	Zx = Z_coo->x;
 
-	*Z_row = PyList_New((size_t)rank);
-	*Z_col = PyList_New((size_t)rank);
-	*Z_data = PyList_New((size_t)rank);
+	Z_row = PyList_New((size_t)rank);
+	Z_col = PyList_New((size_t)rank);
+	Z_data = PyList_New((size_t)rank);
 	for (k=0;k<(size_t)rank;k++)
 	{
-		PyList_SetItem(*Z_row, k, Py_BuildValue("l", Zi[k]));
-		PyList_SetItem(*Z_col, k, Py_BuildValue("l", Zj[k]));
-		PyList_SetItem(*Z_data, k, Py_BuildValue("d", Zx[k]));
+		PyList_SetItem(Z_row, k, Py_BuildValue("l", Zi[k]));
+		PyList_SetItem(Z_col, k, Py_BuildValue("l", Zj[k]));
+		PyList_SetItem(Z_data, k, Py_BuildValue("d", Zx[k]));
 	}
 
-	
-	Py_INCREF(*Z_row);
-	Py_INCREF(*Z_col);
-	Py_INCREF(*Z_data);
-	
+	Py_INCREF(Z_row);
+	Py_INCREF(Z_col);
+	Py_INCREF(Z_data);
 
 	Ri = R_coo->i;
 	Rj = R_coo->j;
 	Rx = R_coo->x;
 
-	*R_row = PyList_New((size_t)rank);
-	*R_col = PyList_New((size_t)rank);
-	*R_data = PyList_New((size_t)rank);
+	R_row = PyList_New((size_t)rank);
+	R_col = PyList_New((size_t)rank);
+	R_data = PyList_New((size_t)rank);
 	for (k=0;k<(size_t)rank;k++)
 	{
-		PyList_SetItem(*R_row, k, Py_BuildValue("l", Ri[k]));
-		PyList_SetItem(*R_col, k, Py_BuildValue("l", Rj[k]));
-		PyList_SetItem(*R_data, k, Py_BuildValue("d", Rx[k]));
+		PyList_SetItem(R_row, k, Py_BuildValue("l", Ri[k]));
+		PyList_SetItem(R_col, k, Py_BuildValue("l", Rj[k]));
+		PyList_SetItem(R_data, k, Py_BuildValue("d", Rx[k]));
 	}
-
-	Py_INCREF(*R_row);
-	Py_INCREF(*R_col);
-	Py_INCREF(*R_data);
-	
 	/*
 	Zi = malloc(sizeof(long) * rank);
 	Zj = malloc(sizeof(long) * rank);
@@ -199,9 +192,9 @@ PyObject* wrap_qr(PyObject* self, PyObject* args)
 	PyListObject *R_row, *R_col, *R_data,
 				 *Z_row, *Z_col, *Z_data;
 
-	if (!PyArg_ParseTuple(args, "OOOllOO",
-				&pyA_data, &pyA_row, &pyA_col,
-				&A_m, &A_n,
+	if (!PyArg_ParseTuple(args, "OO",
+				//&pyA_data, &pyA_row, &pyA_col,
+				//&A_m, &A_n,
 				&pyb_data, &pyb_row))
 		return NULL;
 
@@ -233,20 +226,19 @@ PyObject* wrap_qr(PyObject* self, PyObject* args)
 
 	//PyArg_Parse(tmp, "i", &nnz); tmp->ob_item[0]
 
-	qr(A_data, A_row, A_col, (size_t)A_nnz, (size_t)A_m, (size_t)A_n, b_data, b_row, (size_t)b_nnz, &Z_data, &Z_row, &Z_col, &R_data, &R_row, &R_col);
+	qr(A_data, A_row, A_col, (size_t)A_nnz, (size_t)A_m, (size_t)A_n, b_data, b_row, (size_t)b_nnz, Z_data, Z_row, Z_col, R_data, R_row, R_col);
 
-	//fprintf(stderr, "%p\n", R_col);
-
-	res = Py_BuildValue("OOOOOO", Z_data, Z_row, Z_col,
-								R_data, R_row, R_col);
-	//Py_DECREF(Z_row);
-	//Py_DECREF(Z_col);
+	//result = Py_BuildValue("i", 1);
 	free(A_row);
 	free(A_col);
 	free(A_data);
 	free(b_row);
 	free(b_data);
 
+	res = Py_BuildValue("ooo", A_row, A_col, A_data,
+						R_row, R_col, R_data);
+
+	//Py_INCREF(res);
 	return res;
 }
 static PyMethodDef exampleMethods[] = 
