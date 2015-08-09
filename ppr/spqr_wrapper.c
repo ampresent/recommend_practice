@@ -111,18 +111,26 @@ void qr(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz
 	//x = SuiteSparseQR_C_backslash_default(A_csc, b, cc);
 	// What About econ???????????
 
-	int rank = SuiteSparseQR_C(SPQR_ORDERING_DEFAULT, SPQR_DEFAULT_TOL, 0, 0, A_csc, b_csc, NULL, &Z_csc, NULL, &R_csc, NULL/*&P*/, NULL, NULL, NULL, cc);
+	// TODO ORDER???
+	int rank = SuiteSparseQR_C(0/*SPQR_ORDERING_DEFAULT*/, SPQR_DEFAULT_TOL, 0, 0, A_csc, b_csc, NULL, &Z_csc, NULL, &R_csc, NULL/*&P*/, NULL, NULL, NULL, cc);
 	Z_coo = cholmod_l_sparse_to_triplet(Z_csc, cc);
 	R_coo = cholmod_l_sparse_to_triplet(R_csc, cc);
+
+	/*
+	for (k=0;k<(size_t)rank;k++)
+		fprintf(stderr, "%d,", P[k]);
+	fprintf(stderr, "\n");
+	*/
 
 	Zi = Z_coo->i;
 	Zj = Z_coo->j;
 	Zx = Z_coo->x;
+	Z_nnz = Z_coo->nnz;
 
-	*Z_row = PyList_New((size_t)rank);
-	*Z_col = PyList_New((size_t)rank);
-	*Z_data = PyList_New((size_t)rank);
-	for (k=0;k<(size_t)rank;k++)
+	*Z_row = PyList_New(Z_nnz);
+	*Z_col = PyList_New(Z_nnz);
+	*Z_data = PyList_New(Z_nnz);
+	for (k=0;k<Z_nnz;k++)
 	{
 		PyList_SetItem(*Z_row, k, Py_BuildValue("l", Zi[k]));
 		PyList_SetItem(*Z_col, k, Py_BuildValue("l", Zj[k]));
@@ -138,11 +146,12 @@ void qr(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz
 	Ri = R_coo->i;
 	Rj = R_coo->j;
 	Rx = R_coo->x;
+	R_nnz= R_coo->nnz;
 
-	*R_row = PyList_New((size_t)rank);
-	*R_col = PyList_New((size_t)rank);
-	*R_data = PyList_New((size_t)rank);
-	for (k=0;k<(size_t)rank;k++)
+	*R_row = PyList_New(R_nnz);
+	*R_col = PyList_New(R_nnz);
+	*R_data = PyList_New(R_nnz);
+	for (k=0;k<R_nnz;k++)
 	{
 		PyList_SetItem(*R_row, k, Py_BuildValue("l", Ri[k]));
 		PyList_SetItem(*R_col, k, Py_BuildValue("l", Rj[k]));

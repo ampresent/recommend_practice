@@ -1,20 +1,20 @@
-# TODO : 5. R^-1     6. g    7. exact(with fx)
+# TODO 1. Test Top-k function   2. result decode with p   3. Test With dataset
 
 import operator
 import numpy
-from scipy.sparse import *
+from scipy import sparse
+from scipy.sparse import linalg
 """
 A must be bidirected
 """
 
-def node_permutation(A):
+def P(A):
     p = []
     # O(E)
-    count = {key: len(value) for key, value in A.iteritems()}
+    count = {key: A.getrow(key).nnz for key in xrange(A.shape[0])}
     # Duplicate
     count0 = dict(count)
-    n = len(A)
-    for i in range(n):
+    for i in xrange(A.shape[0]):
         # O(n)
         min_count = min(count.values())
         # O(n)
@@ -28,9 +28,13 @@ def node_permutation(A):
         count.pop(v)
         # O(nlgn)
         for u in count.iterkeys():
-            if v in A[u]:
+            # TODO getrow could be slow
+            if v in A.getrow(u).indices:
                 count[u] -= 1
-    return p
+    pt = [0 for _ in xrange(len(p))]
+    for i in xrange(len(p)):
+        pt[p[i]] = i
+    return p, pt
 
 """
 A : adjacent matrix
@@ -41,10 +45,8 @@ because replace list with binomial tree
 d : seeds set
 """
 def lower_bound(A, d, c):
-    lb = dict.fromkeys(A.iterkeys(), 0)
-    for seed, weight in d.iteritems():
-        lb[seed] = c * weight
-    old_layer = set(d.iterkeys())
+    lb = dict(zip(d.row, d.data * c))
+    old_layer = set(d.row)
     visited = set(old_layer)
     # Introduce old_layer and new_layer to enable
     # transition from one WHOLE layer to another
@@ -52,66 +54,94 @@ def lower_bound(A, d, c):
         new_layer = set()
 
         for u in old_layer:
-            for v in A[u]:
+            A_relevant = A.getrow(u)
+            for v, w in zip(A_relevant.indices, A_relevant.data):
                 if v not in visited:
                     # TODO A[u][v] or A[v][u]?????
-                    lb[v] += (1-c)*A[u][v]*lb[u]
+                    if v not in lb:
+                        lb[v] = 0
+                    lb[v] += (1-c) * w * lb[u]
                     new_layer.add(v)
         for u in new_layer:
             visited.add(u)
 
-        print new_layer
         old_layer = new_layer
     return lb
 
 # Shared by exact and upper_bound
-exact_id1 = 0
+exact_id1 = None
+ub_id1 = None
 
-def exact(u):
+def AD(A, pt):
+    # TODO A.row , no need to tolist()
+    id = map(lambda i: pt[i], A.row)
+    jd = map(lambda j: pt[j], A.col)
+    xd = A.data
+    return sparse.coo_matrix((xd, (id, jd)))
+
+def W(Ad, c):
+    return sparse.eye(A.shape[0]) - (1-c)*Ad
+
+def QR(w, pt, d):
+    w = w.tocoo()
+    #print sparse.coo_matrix((d.data, (map(lambda x: pt[x], d.row), [0]*d.nnz))).todense()
+    import spqr_wrapper
+    # TODO if we pass w as csc_matrix , we could avoid 2 transforms
+    Z_data, Z_row, Z_col,\
+    R_data, R_row, R_col =\
+    spqr_wrapper.qr(w.data.tolist(),
+                    w.row.tolist(),
+                    w.col.tolist(),
+                    w.shape[0], w.shape[1],
+                    d.data.tolist(), d.row.tolist())
+    g = sparse.coo_matrix((Z_data, (Z_row, Z_col)))
+    R = sparse.coo_matrix((R_data, (R_row, R_col)))
+    return g, R
+
+def exact(R_rev, c, g, u):
     # Shared by exact and upper_bound
-    global exact_id1
-    for i in range(n):
-
-        exact_i =
-        yield exact_i
-        exact_id1 = exact_i
+    global exact_id1, ub_id1
+    exact_i = (c * R_rev.getrow(u) * g).data[0]
+    exact_id1 = exact_i
+    return exact_i
 
 def upper_bound(u, lbu, sum_lb, n):
     # Shared by exact and upper_bound
-    global exact_id1
-    ubi = 1 - sum_lb + lbu
-    yield ubi
-
-    # Upper bound _ (i-1)
+    global exact_id1, ub_id1
+    ubi = 0
+    if ub_id1 == None:
+        ubi = 1 - sum_lb + lbu
+    else:
+        # Upper bound _ (i-1)
+        ubi = lbu - exact_id1 + ub_id1
     ub_id1 = ubi
-    for i in range(1, n):
-        ub_i = lbu - exact_id1 + ub_id1
-        yield ub_i
-        ub_id1 = ub_i
+    return ubi
 
 
-def top_k(A, K, theta):
-    lower_bound(A, d, c)
+def top_k(lb, g, R, n, K, theta):
     sum_lb = sum(lb.itervalues())
-    n = len(A)
     # K dummy nodes, After all, only keeps K of all
-    relevance = dict.fromkeys(A.keys()[0:K], 0)
-    for i in range(len(A)):
+    relevance = dict.fromkeys(xrange(K), 0)
+    R_rev = linalg.inv(R)
+    for i in xrange(n):
         u, lbu = max(lb.iteritems(), key=operator.itemgetter(1))
         lb.pop(u)
-        ub = upper_bound(u, lbu, sum_lb, n)
-        if ub < theta:
+        ubu = upper_bound(u, lbu, sum_lb, n)
+        print lbu, ubu
+        if ubu < theta:
             return relevance
         else:
-            relevance_u = exact(u, d)
+            relevance_u = exact(R_rev, c, g, u)
             if relevance_u > theta:
                 v = min(relevance.iteritems(), key=operator.itemgetter(1))[0]
                 # Replace v with u, whose relevance is greater
-                relevance_u.pop(v)
+                relevance.pop(v)
                 relevance[u] = relevance_u
                 # Refresh theta
                 theta = min(relevance.iteritems(), key=operator.itemgetter(1))[1]
+    return relevance
 
+'''
 # A : fake sparse
 # P : fake
 # c : constant
@@ -126,7 +156,9 @@ def w(A, P, c, n):
         for j in A[pi]:
             w[i][j] -= A[pi][P[j]]
     return coo_matrix(w)
+'''
 
+'''
 # w : coo sparse
 # n : constant
 # q :
@@ -146,7 +178,6 @@ def q(w, n):
         for j in range(i+1, n):
             r[i][j] = w[j].dot(q[i])
 
-'''
 # Reverse of R
 def Rr(r):
     n = len(r)
@@ -157,6 +188,7 @@ def Rr(r):
             for
 '''
 
+'''
 # q: dense, p: fake, d: sparse
 def g(q, p, d, n):
     # p reverse
@@ -167,12 +199,23 @@ def g(q, p, d, n):
     g = numpy.zeros(n)
     for i in xrange(n):
         g[i] = q[pr[i]] * d[i]
+'''
 
 if __name__ == '__main__':
-    '''
-    A = {1: {2: 0.6, 3: 0.4}, 2: {3: 0.3, 4: 0.7}, 3: {1: 0.8, 4: 0.2}, 4: {}}
-    d = {1: 0.9, 4: 0.1}
+    A = sparse.coo_matrix([
+        [0, 0.6, 0.4, 0],
+        [0, 0, 0.3, 0.7],
+        [0.8, 0, 0, 0.2],
+        [0, 0, 0, 0]]
+    )
+    d = sparse.coo_matrix(([0.9, 0.1], ([0, 3], [0, 0])))
+    #d = [0.9, 0, 0, 0.1]
     c = 0.2
-    lb = lower_bound(A, d, c)
-    print lb
-    '''
+    p, pt = P(A)
+    d.row = numpy.array(map(lambda x: pt[x], d.row))
+    Ad = AD(A, pt)
+    w = W(Ad, c)
+    g, R = QR(w, pt, d)
+    lb = lower_bound(Ad, d, c)
+    res = top_k(lb, g, R, Ad.shape[0], 3, 0.0)
+    print res
