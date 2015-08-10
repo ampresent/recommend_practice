@@ -1,4 +1,6 @@
-# TODO 1. Test Top-k function   2. result decode with p   3. Test With dataset
+# TODO 1. Test Top-k function   2. result decode with p   3. Test With dataset.
+# TODO PO: Potential Optimization   NC: Not clear   |A|:nonzeroes   Convention:'All assesments talk about a sole statement'
+# TODO All the todo, may refer to similar ones, PLEASE / to FIND ALL OCCURRANCE
 
 import operator
 import numpy
@@ -10,29 +12,35 @@ A must be bidirected
 
 def P(A):
     p = []
-    # O(E)
-    count = {key: A.getrow(key).nnz for key in xrange(A.shape[0])}
+    n = A.shape[0]
+    # O(|A|) PO csr_matrix can reduce
+    count = {key: A.getrow(key).nnz for key in xrange(n)}
     # Duplicate
-    count0 = dict(count)
-    for i in xrange(A.shape[0]):
-        # O(n)
+    count_orig = dict(count)
+    for i in xrange(n):
+    # O(n^2)
         min_count = min(count.values())
-        # O(n)
+    # O(n^2)
         u_set = filter(lambda f: f[1] == min_count, count.iteritems())
-        # O(nlgn)
-        degree_set = {u: count0[u] for u, _ in u_set}
-        # O(n)
-        v, max_count0 = max(degree_set.iteritems(), key=operator.itemgetter(1))
-        # O(1)
+    # O(n^2lgn)
+        degree_set = {u: count_orig[u] for u, _ in u_set}
+    # O(n^2)
+        v, max_count_orig = max(degree_set.iteritems(), key=operator.itemgetter(1))
+    # O(n)
         p.append(v)
+    # O(nlgn)
         count.pop(v)
-        # O(nlgn)
+    # O(n^2)
         for u in count.iterkeys():
-            # TODO getrow could be slow
+    # PO
+    # O(n^3|A| + n^2lgn), supposed to be O(n^2) in dense matrix
+    # A tuple dict count could reduce it to O(n^2lg[|A|])
             if v in A.getrow(u).indices:
                 count[u] -= 1
-    pt = [0 for _ in xrange(len(p))]
-    for i in xrange(len(p)):
+    # O(n)
+    pt = [0 for _ in xrange(n)]
+    # O(n)
+    for i in xrange(n):
         pt[p[i]] = i
     return p, pt
 
@@ -45,7 +53,9 @@ because replace list with binomial tree
 d : seeds set
 """
 def lower_bound(A, d, c):
+    # O(nlgn)
     lb = dict(zip(d.row, d.data * c))
+    # O(n)
     old_layer = set(d.row)
     visited = set(old_layer)
     # Introduce old_layer and new_layer to enable
@@ -53,18 +63,24 @@ def lower_bound(A, d, c):
     while len(old_layer) > 0:
         new_layer = set()
 
+    # O(n)
         for u in old_layer:
+    # O(|A|)
             A_relevant = A.getrow(u)
+    # O(|A|)
             for v, w in zip(A_relevant.indices, A_relevant.data):
+    # O(|A|lgn)
                 if v not in visited:
-                    # TODO A[u][v] or A[v][u]?????
+    # O(|A|lgn)
                     if v not in lb:
                         lb[v] = 0
                     lb[v] += (1-c) * w * lb[u]
+    # O(|A|lgn)
                     new_layer.add(v)
         for u in new_layer:
+    # O(nlgn)
             visited.add(u)
-
+    # O(n)
         old_layer = new_layer
     return lb
 
@@ -74,12 +90,15 @@ ub_id1 = None
 
 def AD(A, pt):
     # TODO A.row , no need to tolist()
+    # O(n)
     id = map(lambda i: pt[i], A.row)
     jd = map(lambda j: pt[j], A.col)
+    # O(1)
     xd = A.data
     return sparse.coo_matrix((xd, (id, jd)))
 
 def W(Ad, c):
+    # O(|A|)
     return sparse.eye(A.shape[0]) - (1-c)*Ad
 
 def QR(w, pt, d):
@@ -101,6 +120,7 @@ def QR(w, pt, d):
 def exact(R_rev, c, g, u):
     # Shared by exact and upper_bound
     global exact_id1, ub_id1
+    # O(n)
     exact_i = (c * R_rev.getrow(u) * g).data[0]
     exact_id1 = exact_i
     return exact_i
@@ -119,24 +139,36 @@ def upper_bound(u, lbu, sum_lb, n):
 
 
 def top_k(lb, g, R, n, K, theta):
+    # O(n)
     sum_lb = sum(lb.itervalues())
     # K dummy nodes, After all, only keeps K of all
+    # O(KlgK)
     relevance = dict.fromkeys(xrange(K), 0)
+    # NC 
+    # sparse matrix inverse ?????
+    # should've been less than O(n^3) 'cause sparsity
     R_rev = linalg.inv(R)
     for i in xrange(n):
+        # O(n^2)
         u, lbu = max(lb.iteritems(), key=operator.itemgetter(1))
+        # O(n^2)
         lb.pop(u)
+        # O(n)
         ubu = upper_bound(u, lbu, sum_lb, n)
-        print lbu, ubu
         if ubu < theta:
             return relevance
         else:
+            # O(n^2)
             relevance_u = exact(R_rev, c, g, u)
             if relevance_u > theta:
+                # O(n^2)
                 v = min(relevance.iteritems(), key=operator.itemgetter(1))[0]
                 # Replace v with u, whose relevance is greater
+                # O(n^2)
                 relevance.pop(v)
+                # O(nlgn)
                 relevance[u] = relevance_u
+                # O(n^2)
                 # Refresh theta
                 theta = min(relevance.iteritems(), key=operator.itemgetter(1))[1]
     return relevance
@@ -168,14 +200,14 @@ def q(w, n):
     qd = numpy.array(w.transpose())
     q = numpy.zeros((n, n))
     r = numpy.zeros((n, n))
-    for i in range(n):
-        for j in range(1, i):
+    for i in xrange(n):
+        for j in xrange(1, i):
             # TODO is it very slow???
             qd[i] -= w[i].dot(q[j]) * q[j]
         norm_qdi = numpy.linalg.norm(qd[i])
         q[i] = qd[i] /  numpy.linalg.norm(qd[i])
         r[i][i] = norm_qdi
-        for j in range(i+1, n):
+        for j in xrange(i+1, n):
             r[i][j] = w[j].dot(q[i])
 
 # Reverse of R

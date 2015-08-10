@@ -266,6 +266,7 @@ static PyMethodDef exampleMethods[] =
 void initspqr_wrapper() 
 {
 	PyObject* m;
+	/*
 	pModule = PyImport_ImportModule("scipy.sparse");
 	if ( !pModule ) 
 	{ 
@@ -284,6 +285,7 @@ void initspqr_wrapper()
 		fprintf(stderr, "Can't find class coo_matrix");
 		return;
 	} 
+	*/
 	/*
 	   pDict = PyModule_GetDict(pClass);
 	   if ( !pDict ) 
