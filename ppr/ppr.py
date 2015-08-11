@@ -1,49 +1,46 @@
 # TODO 1. Test Top-k function   2. result decode with p   3. Test With dataset.
 # TODO PO: Potential Optimization   NC: Not clear   m:nonzeroes(numedges)   Convention:'All assesments talk about a sole statement'
 # TODO All the todo, may refer to similar ones, PLEASE / to FIND ALL OCCURRANCE
-# TODO 100 times min operates 10-million-size on dict needs more than 1000s, is it binomial tree???????
+# TODO use enumerate
 
 import operator
 import numpy
 from scipy import sparse
 from scipy.sparse import linalg
+
 """
 A must be bidirected
 """
-
 def P(A):
+    visited = set()
     p = []
     n = A.shape[0]
-    # O(m) PO csr_matrix can reduce
-    count = {key: A.getrow(key).nnz for key in xrange(n)}
-    # Duplicate
-    count_orig = dict(count)
-    for i in xrange(n):
-    # O(nlgn)
-        min_count = min(count.values())
-    # PO find the min set n times should be O(nlgn)
-    # O(n^2)
-        u_set = filter(lambda f: f[1] == min_count, count.iteritems())
-    # O(n^2lgn)
-        degree_set = {u: count_orig[u] for u, _ in u_set}
-    # O(nlgn)
-        v, max_count_orig = max(degree_set.iteritems(), key=operator.itemgetter(1))
+    # O(|A|) PO csr_matrix can reduce
+    count = []
+    for x in xrange(n):
+        v = A.getrow(key).nnz
+        count.append((v,-v,x))
+    heapq.heapify(count)
+    while count:
+    # O(n) REMOVE A ROW
+        v = heapq.heappop()[2]
+    # O(1)
+        if v not int visited:
+    # O(lgn)
+            visited.add(v)
+    # O(1)
+            p.append(v)
+    # o(|A|)
+            colv = A.getcol(v)
+            for ui_left, ui_right in couple(colv.indptr):
+                for u in colv.data[ui_left:ui_right]
+    # o(|A|)
+                    heapq.heappush((u[0]-1, u[1], u[2]))
     # O(n)
-        p.append(v)
-    # O(nlgn)
-        count.pop(v)
-    # O(n^2)
-        for u in count.iterkeys():
-    # PO
-    # O(n^3m + n^2lgn), supposed to be O(n^2) in dense matrix
-    # A tuple dict count could reduce it to O(n^2lg[m])
-            if v in A.getrow(u).indices:
-                count[u] -= 1
+    pt = [0] * n
     # O(n)
-    pt = [0 for _ in xrange(n)]
-    # O(n)
-    for i in xrange(n):
-        pt[p[i]] = i
+    for i, pi in enumerate(p):
+        pt[pi] = i
     return p, pt
 
 """
