@@ -1,6 +1,7 @@
 # TODO 1. Test Top-k function   2. result decode with p   3. Test With dataset.
-# TODO PO: Potential Optimization   NC: Not clear   |A|:nonzeroes   Convention:'All assesments talk about a sole statement'
+# TODO PO: Potential Optimization   NC: Not clear   m:nonzeroes(numedges)   Convention:'All assesments talk about a sole statement'
 # TODO All the todo, may refer to similar ones, PLEASE / to FIND ALL OCCURRANCE
+# TODO 100 times min operates 10-million-size on dict needs more than 1000s, is it binomial tree???????
 
 import operator
 import numpy
@@ -13,18 +14,19 @@ A must be bidirected
 def P(A):
     p = []
     n = A.shape[0]
-    # O(|A|) PO csr_matrix can reduce
+    # O(m) PO csr_matrix can reduce
     count = {key: A.getrow(key).nnz for key in xrange(n)}
     # Duplicate
     count_orig = dict(count)
     for i in xrange(n):
-    # O(n^2)
+    # O(nlgn)
         min_count = min(count.values())
+    # PO find the min set n times should be O(nlgn)
     # O(n^2)
         u_set = filter(lambda f: f[1] == min_count, count.iteritems())
     # O(n^2lgn)
         degree_set = {u: count_orig[u] for u, _ in u_set}
-    # O(n^2)
+    # O(nlgn)
         v, max_count_orig = max(degree_set.iteritems(), key=operator.itemgetter(1))
     # O(n)
         p.append(v)
@@ -33,8 +35,8 @@ def P(A):
     # O(n^2)
         for u in count.iterkeys():
     # PO
-    # O(n^3|A| + n^2lgn), supposed to be O(n^2) in dense matrix
-    # A tuple dict count could reduce it to O(n^2lg[|A|])
+    # O(n^3m + n^2lgn), supposed to be O(n^2) in dense matrix
+    # A tuple dict count could reduce it to O(n^2lg[m])
             if v in A.getrow(u).indices:
                 count[u] -= 1
     # O(n)
@@ -65,17 +67,17 @@ def lower_bound(A, d, c):
 
     # O(n)
         for u in old_layer:
-    # O(|A|)
+    # O(m)
             A_relevant = A.getrow(u)
-    # O(|A|)
+    # O(m)
             for v, w in zip(A_relevant.indices, A_relevant.data):
-    # O(|A|lgn)
+    # O(mlgn)
                 if v not in visited:
-    # O(|A|lgn)
+    # O(mlgn)
                     if v not in lb:
                         lb[v] = 0
                     lb[v] += (1-c) * w * lb[u]
-    # O(|A|lgn)
+    # O(mlgn)
                     new_layer.add(v)
         for u in new_layer:
     # O(nlgn)
@@ -98,14 +100,17 @@ def AD(A, pt):
     return sparse.coo_matrix((xd, (id, jd)))
 
 def W(Ad, c):
-    # O(|A|)
+    # O(m+n)
     return sparse.eye(A.shape[0]) - (1-c)*Ad
 
 def QR(w, pt, d):
     w = w.tocoo()
     #print sparse.coo_matrix((d.data, (map(lambda x: pt[x], d.row), [0]*d.nnz))).todense()
     import spqr_wrapper
-    # TODO if we pass w as csc_matrix , we could avoid 2 transforms
+    # NC
+    # PO if we pass w as csc_matrix , we could avoid 2 transforms
+    # qr: O(???) less than O(n^2) according to the table
+    # g: O(|Q|)
     Z_data, Z_row, Z_col,\
     R_data, R_row, R_col =\
     spqr_wrapper.qr(w.data.tolist(),
@@ -120,7 +125,6 @@ def QR(w, pt, d):
 def exact(R_rev, c, g, u):
     # Shared by exact and upper_bound
     global exact_id1, ub_id1
-    # O(n)
     exact_i = (c * R_rev.getrow(u) * g).data[0]
     exact_id1 = exact_i
     return exact_i
@@ -149,26 +153,27 @@ def top_k(lb, g, R, n, K, theta):
     # should've been less than O(n^3) 'cause sparsity
     R_rev = linalg.inv(R)
     for i in xrange(n):
-        # O(n^2)
+        # O(nlgn)
         u, lbu = max(lb.iteritems(), key=operator.itemgetter(1))
-        # O(n^2)
+        # O(nlgn)
         lb.pop(u)
         # O(n)
         ubu = upper_bound(u, lbu, sum_lb, n)
         if ubu < theta:
             return relevance
         else:
-            # O(n^2)
+            # O(|Q|+|F|)
+            # TODO When calc exactness, F=cPtR-1 not F=cR-1
             relevance_u = exact(R_rev, c, g, u)
             if relevance_u > theta:
-                # O(n^2)
+                # O(nlgn)
                 v = min(relevance.iteritems(), key=operator.itemgetter(1))[0]
                 # Replace v with u, whose relevance is greater
-                # O(n^2)
+                # O(nlgn)
                 relevance.pop(v)
                 # O(nlgn)
                 relevance[u] = relevance_u
-                # O(n^2)
+                # O(nlgn)
                 # Refresh theta
                 theta = min(relevance.iteritems(), key=operator.itemgetter(1))[1]
     return relevance
