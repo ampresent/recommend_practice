@@ -1,12 +1,13 @@
 # TODO 1. Test Top-k function   2. result decode with p   3. Test With dataset.
 # TODO PO: Potential Optimization   NC: Not clear   m:nonzeroes(numedges)   Convention:'All assesments talk about a sole statement'
 # TODO All the todo, may refer to similar ones, PLEASE / to FIND ALL OCCURRANCE
-# TODO use enumerate
 
 import operator
 import numpy
 from scipy import sparse
 from scipy.sparse import linalg
+
+def couple(iterable)
 
 """
 A must be bidirected
@@ -15,26 +16,27 @@ def P(A):
     visited = set()
     p = []
     n = A.shape[0]
-    # O(|A|) PO csr_matrix can reduce
+    # O(m) PO csr_matrix can reduce
     count = []
     for x in xrange(n):
-        v = A.getrow(key).nnz
+        v = A.getrow(x).nnz
         count.append((v,-v,x))
     heapq.heapify(count)
     while count:
-    # O(n) REMOVE A ROW
+    # O(n+m) REMOVE A ROW, one node could be removed more than once
         v = heapq.heappop()[2]
     # O(1)
         if v not int visited:
-    # O(lgn)
+    # O(n)
             visited.add(v)
     # O(1)
             p.append(v)
-    # o(|A|)
+    # o(m)
+
             colv = A.getcol(v)
             for ui_left, ui_right in couple(colv.indptr):
                 for u in colv.data[ui_left:ui_right]
-    # o(|A|)
+    # o(m)
                     heapq.heappush((u[0]-1, u[1], u[2]))
     # O(n)
     pt = [0] * n
@@ -52,32 +54,27 @@ because replace list with binomial tree
 d : seeds set
 """
 def lower_bound(A, d, c):
-    # O(nlgn)
+    # O(n)
     lb = dict(zip(d.row, d.data * c))
     # O(n)
     old_layer = set(d.row)
     visited = set(old_layer)
     # Introduce old_layer and new_layer to enable
     # transition from one WHOLE layer to another
-    while len(old_layer) > 0:
+    while old_layer
         new_layer = set()
-
     # O(n)
         for u in old_layer:
     # O(m)
             A_relevant = A.getrow(u)
     # O(m)
             for v, w in zip(A_relevant.indices, A_relevant.data):
-    # O(mlgn)
                 if v not in visited:
-    # O(mlgn)
-                    if v not in lb:
-                        lb[v] = 0
-                    lb[v] += (1-c) * w * lb[u]
-    # O(mlgn)
+    # O(n)
+                    lb.setdefault(v, 0) += (1-c) * w * lb[u]
                     new_layer.add(v)
         for u in new_layer:
-    # O(nlgn)
+    # O(n)
             visited.add(u)
     # O(n)
         old_layer = new_layer
@@ -142,98 +139,38 @@ def upper_bound(u, lbu, sum_lb, n):
 def top_k(lb, g, R, n, K, theta):
     # O(n)
     sum_lb = sum(lb.itervalues())
+    heaplb = zip(lb.values(), lb.keys())
+    # O(n)
+    heapq.heapify(heaplb)
     # K dummy nodes, After all, only keeps K of all
-    # O(KlgK)
-    relevance = dict.fromkeys(xrange(K), 0)
+    # O(K)
+    relevance = [(0, k) for k in xrange(K)]
+    heapq.heapify(relevance)
     # NC 
     # sparse matrix inverse ?????
     # should've been less than O(n^3) 'cause sparsity
     R_rev = linalg.inv(R)
     for i in xrange(n):
-        # O(nlgn)
-        u, lbu = max(lb.iteritems(), key=operator.itemgetter(1))
-        # O(nlgn)
-        lb.pop(u)
+        # O(n)
+        lbu, u = heapq.heappop(heaplb)
         # O(n)
         ubu = upper_bound(u, lbu, sum_lb, n)
         if ubu < theta:
-            return relevance
+            return list(relevance)
         else:
             # O(|Q|+|F|)
             # TODO When calc exactness, F=cPtR-1 not F=cR-1
             relevance_u = exact(R_rev, c, g, u)
             if relevance_u > theta:
-                # O(nlgn)
-                v = min(relevance.iteritems(), key=operator.itemgetter(1))[0]
                 # Replace v with u, whose relevance is greater
-                # O(nlgn)
-                relevance.pop(v)
-                # O(nlgn)
-                relevance[u] = relevance_u
-                # O(nlgn)
+                # O(n)
+                v = heapq.heappop(relevance)
+                heapq.heappush((relevance_u, u))
+                # O(n)
                 # Refresh theta
-                theta = min(relevance.iteritems(), key=operator.itemgetter(1))[1]
+                theta = relevance[0][0]
     return relevance
 
-'''
-# A : fake sparse
-# P : fake
-# c : constant
-# n : constant
-# w : coo sparse
-def w(A, P, c, n):
-    # W has to be dense, so use numpy.array
-    # O(|Q|)
-    w = dict()
-    for i in A:
-        pi = P[i]
-        for j in A[pi]:
-            w[i][j] -= A[pi][P[j]]
-    return coo_matrix(w)
-'''
-
-'''
-# w : coo sparse
-# n : constant
-# q :
-# r :
-def q(w, n):
-    # TODO is it slow? And it has side effects???
-    qd = numpy.array(w.transpose())
-    q = numpy.zeros((n, n))
-    r = numpy.zeros((n, n))
-    for i in xrange(n):
-        for j in xrange(1, i):
-            # TODO is it very slow???
-            qd[i] -= w[i].dot(q[j]) * q[j]
-        norm_qdi = numpy.linalg.norm(qd[i])
-        q[i] = qd[i] /  numpy.linalg.norm(qd[i])
-        r[i][i] = norm_qdi
-        for j in xrange(i+1, n):
-            r[i][j] = w[j].dot(q[i])
-
-# Reverse of R
-def Rr(r):
-    n = len(r)
-    rr = numpy.zeros((n, n))
-    for i in xrange(n-1, -1, -1):
-        rr[i][i] = 1.0 / r[i][i]
-        for j in xrange(n-1, i, -1):
-            for
-'''
-
-'''
-# q: dense, p: fake, d: sparse
-def g(q, p, d, n):
-    # p reverse
-    pr = numpy.zeros(n)
-    for i in xrange(n):
-        pr[p[i]] = i
-
-    g = numpy.zeros(n)
-    for i in xrange(n):
-        g[i] = q[pr[i]] * d[i]
-'''
 
 if __name__ == '__main__':
     A = sparse.coo_matrix([
