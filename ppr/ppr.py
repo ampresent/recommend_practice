@@ -3,6 +3,7 @@
 # TODO All the todo, may refer to similar ones, PLEASE / to FIND ALL OCCURRANCE
 # TODO Remove getrow and getcol
 # TODO Reevanluating P's time complexity
+# TODO Kinda strange because Aij seems reverseing( Like Aji) in the origin paper
 
 import itertools
 import heapq
@@ -11,23 +12,16 @@ import numpy
 from scipy import sparse
 from scipy.sparse import linalg
 
-"""
-A must be bidirected
-"""
-def P(A):
+# A: csc
+# count_row & count_col can be changed
+def P(A_csc, count_row, count_col):
     visited = set()
     p = []
-    n = A.shape[0]
-    A_csc = A.tocsc()
+    n = A_csc.shape[0]
     # O(m) PO csr_matrix can reduce
-    count = []
-    hash_count = dict()
-    hash_count_orig = dict()
-    for x, group in itertools.groupby(A.row):
-        l = len(list(group))
-        count.append((l,-l,x))
-        hash_count[x] = l
-        hash_count_orig[x] = l
+    count = [0] * n
+    for i in xrange(n):
+        count[i] = (count_col[i], -count_row[i], i)
     heapq.heapify(count)
     while count:
     # O(n+m) REMOVE A ROW, one node could be removed more than once
@@ -38,10 +32,11 @@ def P(A):
             visited.add(v)
     # O(1)
             p.append(v)
+            #count_row[v] = 0
             for ui in xrange(A_csc.indptr[v], A_csc.indptr[v+1]):
                 u = A_csc.indices[ui]
-                hash_count[u] -= 1
-                heapq.heappush(count, (hash_count[u], hash_count_orig[u], u))
+                count_row[u] -= 1
+                heapq.heappush(count, (count_col[u], -count_row[u], u))
     # O(n)
     pt = [0] * n
     # O(n)
@@ -70,6 +65,7 @@ def lower_bound(A, d, c):
     # O(n)
         for u in old_layer:
     # O(m)
+            # TODO I need A_csr!!!!!!!!!!
             A_relevant = A.getrow(u)
     # O(m)
             for v, w in itertools.izip(A_relevant.indices, A_relevant.data):
@@ -96,7 +92,7 @@ def AD(A, pt):
     jd = map(lambda j: pt[j], A.col)
     # O(1)
     xd = A.data
-    return sparse.coo_matrix((xd, (id, jd)))
+    return sparse.coo_matrix((xd, (id, jd)), shape=A.shape)
 
 def W(Ad, c):
     # O(m+n)
@@ -116,14 +112,18 @@ def QR(w, pt, d):
                     w.col.tolist(),
                     w.shape[0], w.shape[1],
                     d.data.tolist(), d.row.tolist())
-    g = sparse.coo_matrix((Z_data, (Z_row, Z_col)))
-    R = sparse.coo_matrix((R_data, (R_row, R_col)))
+    g = sparse.coo_matrix((Z_data, (Z_row, Z_col)), shape=(w.shape[0], 1))
+    R = sparse.coo_matrix((R_data, (R_row, R_col)), shape=w.shape)
     return g, R
 
 def exact(R_rev, c, g, u):
     # Shared by exact and upper_bound
     global exact_id1, ub_id1
-    exact_i = (c * R_rev.getrow(u) * g).data[0]
+    tmp = c * R_rev.getrow(u) * g
+    if tmp.nnz == 0:
+        exact_i = 0
+    else:
+        exact_i = (c * R_rev.getrow(u) * g).data[0]
     exact_id1 = exact_i
     return exact_i
 
@@ -143,7 +143,7 @@ def upper_bound(u, lbu, sum_lb, n):
 def top_k(lb, g, R, n, K, theta):
     # O(n)
     sum_lb = sum(lb.itervalues())
-    heaplb = zip(lb.values(), lb.keys())
+    heaplb = [(-b, a) for a, b in lb.iteritems()]
     # O(n)
     heapq.heapify(heaplb)
     # K dummy nodes, After all, only keeps K of all
@@ -155,6 +155,7 @@ def top_k(lb, g, R, n, K, theta):
     for i in xrange(n):
         # O(n)
         lbu, u = heapq.heappop(heaplb)
+        lbu = -lbu
         # O(n)
         ubu = upper_bound(u, lbu, sum_lb, n)
         if ubu < theta:
@@ -163,29 +164,44 @@ def top_k(lb, g, R, n, K, theta):
             # O(|Q|+|F|)
             # TODO When calc exactness, F=cPtR-1 not F=cR-1
             relevance_u = exact(R_rev, c, g, u)
+            print 'u=%d, li=%lf, ui=%lf, ei=%lf\n' % (u, lbu, ubu, relevance_u)
             if relevance_u > theta:
                 # Replace v with u, whose relevance is greater
                 # O(n)
-                v = heapq.heappop(relevance)
-                heapq.heappush(relevance,(relevance_u, u))
+                heapq.heappop(relevance)
+                heapq.heappush(relevance, (-relevance_u, u))
                 # O(n)
                 # Refresh theta
-                theta = relevance[0][0]
+                theta = -relevance[0][0]
     return relevance
 
 
+# A: coo_matrix
+def count_row_col(a):
+    row = a.row
+    col = a.col
+    count_row = numpy.zeros(a.shape[0])
+    count_col = numpy.zeros(a.shape[1])
+    for i in row:
+        count_row[i] += 1
+    for j in col:
+        count_col[j] += 1
+    return count_row, count_col
+
 if __name__ == '__main__':
     A = sparse.coo_matrix([
-        [0, 0.6, 0.4, 0],
-        [0, 0, 0.3, 0.7],
-        [0.8, 0, 0, 0.2],
-        [0, 0, 0, 0]]
+        [0, 0, 0, 1],
+        [0, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0.5, 0.5, 0]]
     )
-    d = sparse.coo_matrix(([0.9, 0.1], ([0, 3], [0, 0])))
-    #d = [0.9, 0, 0, 0.1]
+    A_csc = A.tocsc()
+    count_row, count_col = count_row_col(A)
+    d = sparse.coo_matrix([[0.9], [0], [0], [0.1]])
     c = 0.2
-    p, pt = P(A)
+    p, pt = P(A_csc, count_row, count_col)
     d.row = numpy.array(map(lambda x: pt[x], d.row))
+    print d.todense()
     Ad = AD(A, pt)
     w = W(Ad, c)
     g, R = QR(w, pt, d)
