@@ -52,9 +52,12 @@ because replace list with binomial tree
 
 d : seeds set
 """
-def lower_bound(A, d, c):
+def lower_bound(A_csc, d, c):
     # O(n)
-    lb = dict(itertools.izip(d.row, d.data * c))
+    #lb = dict(itertools.izip(d.row, d.data * c))
+    lb = numpy.zeros(d.shape[0])
+    for i, j in itertools.izip(d.row, d.data):
+        lb[i] = j * c
     # O(n)
     old_layer = set(d.row)
     visited = set(old_layer)
@@ -65,13 +68,11 @@ def lower_bound(A, d, c):
     # O(n)
         for u in old_layer:
     # O(m)
-            # TODO I need A_csr!!!!!!!!!!
-            A_relevant = A.getrow(u)
-    # O(m)
-            for v, w in itertools.izip(A_relevant.indices, A_relevant.data):
+            for vi in xrange(A_csc.indptr[u], A_csc.indptr[u+1]):
+                v = A_csc.indices[vi]
+                w = A_csc.data[vi]
                 if v not in visited:
     # O(n)
-                    lb.setdefault(v, 0)
                     lb[v] += (1-c) * w * lb[u]
                     new_layer.add(v)
         for u in new_layer:
@@ -142,8 +143,8 @@ def upper_bound(u, lbu, sum_lb, n):
 
 def top_k(lb, g, R, n, K, theta):
     # O(n)
-    sum_lb = sum(lb.itervalues())
-    heaplb = [(-b, a) for a, b in lb.iteritems()]
+    sum_lb = sum(lb)
+    heaplb = [(-b, a) for a, b in enumerate(lb)]
     # O(n)
     heapq.heapify(heaplb)
     # K dummy nodes, After all, only keeps K of all
@@ -164,16 +165,17 @@ def top_k(lb, g, R, n, K, theta):
             # O(|Q|+|F|)
             # TODO When calc exactness, F=cPtR-1 not F=cR-1
             relevance_u = exact(R_rev, c, g, u)
-            print 'u=%d, li=%lf, ui=%lf, ei=%lf\n' % (u, lbu, ubu, relevance_u)
+            print u, lbu, ubu, relevance_u
+            #print 'u=%d, li=%lf, ui=%lf, ei=%lf\n' % (u, lbu, ubu, relevance_u)
             if relevance_u > theta:
                 # Replace v with u, whose relevance is greater
                 # O(n)
                 heapq.heappop(relevance)
-                heapq.heappush(relevance, (-relevance_u, u))
+                heapq.heappush(relevance, (relevance_u, u))
                 # O(n)
                 # Refresh theta
-                theta = -relevance[0][0]
-    return relevance
+                theta = relevance[0][0]
+    return sorted(relevance, reverse=True)
 
 
 # A: coo_matrix
@@ -189,6 +191,7 @@ def count_row_col(a):
     return count_row, count_col
 
 if __name__ == '__main__':
+    # !!!!WITH row & col reversed
     A = sparse.coo_matrix([
         [0, 0, 0, 1],
         [0, 0, 0, 0],
@@ -201,10 +204,10 @@ if __name__ == '__main__':
     c = 0.2
     p, pt = P(A_csc, count_row, count_col)
     d.row = numpy.array(map(lambda x: pt[x], d.row))
-    print d.todense()
     Ad = AD(A, pt)
     w = W(Ad, c)
     g, R = QR(w, pt, d)
-    lb = lower_bound(Ad, d, c)
+    Ad_csc = Ad.tocsc()
+    lb = lower_bound(Ad_csc, d, c)
     res = top_k(lb, g, R, Ad.shape[0], 3, 0.0)
     print res
