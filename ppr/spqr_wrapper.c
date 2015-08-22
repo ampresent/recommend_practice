@@ -14,7 +14,7 @@ PyObject *pDict = NULL;
 PyObject *pClass = NULL;
 PyObject *pGetnnz = NULL;
 
-void qr(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz, size_t A_m, size_t A_n, double const *b_data, long const * b_row, size_t b_nnz, PyListObject **Z_data, PyListObject **Z_row, PyListObject **Z_col, PyListObject **R_data, PyListObject **R_row, PyListObject **R_col){
+void qr(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz, size_t A_m, size_t A_n, double const *b_data, long const * b_row, size_t b_nnz, PyListObject **Z_data, PyListObject **Z_row, PyListObject **Z_col, PyListObject **R_data, PyListObject **R_indptr, PyListObject **R_indices){
 	// Solves the matrix equation Ax=b where A is a sparse matrix and x and b
 	// are dense column vectors. A and b are inputs, x is solved for in the
 	// least squares sense using a rank-revealing QR factorization.
@@ -36,11 +36,11 @@ void qr(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz
 	cholmod_common Common, *cc;
 	// Why must it compress ??????
 	cholmod_sparse *A_csc, *b_csc, *Z_csc, *R_csc;
-	cholmod_triplet *A_coo, *b_coo, *Z_coo, *R_coo;
+	cholmod_triplet *A_coo, *b_coo, *Z_coo;//, *R_coo;
 	//SuiteSparse_long *P;
 	size_t k, R_nnz, Z_nnz;
 	// Helper pointers
-	long *Ai, *Aj, *bi, *bj, *Zi, *Zj, *Ri, *Rj;
+	long *Ai, *Aj, *bi, *bj, *Zi, *Zj, *Rp, *Ri;//, *Ri, *Rj;
 	double *Ax, *bx, *Zx, *Rx;
 
 	/*
@@ -114,7 +114,7 @@ void qr(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz
 	// TODO ORDER???
 	int rank = SuiteSparseQR_C(0/*SPQR_ORDERING_DEFAULT*/, SPQR_DEFAULT_TOL, 0, 0, A_csc, b_csc, NULL, &Z_csc, NULL, &R_csc, NULL/*&P*/, NULL, NULL, NULL, cc);
 	Z_coo = cholmod_l_sparse_to_triplet(Z_csc, cc);
-	R_coo = cholmod_l_sparse_to_triplet(R_csc, cc);
+	//R_coo = cholmod_l_sparse_to_triplet(R_csc, cc);
 
 	/*
 	for (k=0;k<(size_t)rank;k++)
@@ -142,24 +142,40 @@ void qr(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz
 	Py_INCREF(*Z_col);
 	Py_INCREF(*Z_data);
 	
-
+	/*
 	Ri = R_coo->i;
 	Rj = R_coo->j;
 	Rx = R_coo->x;
 	R_nnz= R_coo->nnz;
 
-	*R_row = PyList_New(R_nnz);
-	*R_col = PyList_New(R_nnz);
+	*/
+	Rp = R_csc -> p;
+	Ri = R_csc -> i;
+	Rx = R_csc -> x;
+	R_nnz = R_csc -> nzmax;
+
+	/*
+	for (k=0;k<R_csc->ncol + 1;k ++){
+		fprintf(stderr, "%d\n", ((long*)(R_csc->p))[k]);
+	}
+	*/
+
+	*R_indptr = PyList_New(R_csc->ncol + 1);
+	*R_indices = PyList_New(R_nnz);
 	*R_data = PyList_New(R_nnz);
+
 	for (k=0;k<R_nnz;k++)
 	{
-		PyList_SetItem(*R_row, k, Py_BuildValue("l", Ri[k]));
-		PyList_SetItem(*R_col, k, Py_BuildValue("l", Rj[k]));
+		PyList_SetItem(*R_indices, k, Py_BuildValue("l", Ri[k]));
 		PyList_SetItem(*R_data, k, Py_BuildValue("d", Rx[k]));
 	}
+	for (k=0;k<R_csc->ncol+1;k++)
+	{
+		PyList_SetItem(*R_indptr, k, Py_BuildValue("l", Rp[k]));
+	}
 
-	Py_INCREF(*R_row);
-	Py_INCREF(*R_col);
+	Py_INCREF(*R_indptr);
+	Py_INCREF(*R_indices);
 	Py_INCREF(*R_data);
 	
 	/*
@@ -190,7 +206,7 @@ void qr(double const *A_data, long const *A_row, long const *A_col, size_t A_nnz
 	cholmod_l_free_sparse(&b_csc, cc);
 	cholmod_l_free_triplet(&Z_coo, cc);
 	cholmod_l_free_sparse(&Z_csc, cc);
-	cholmod_l_free_triplet(&R_coo, cc);
+	//cholmod_l_free_triplet(&R_coo, cc);
 	cholmod_l_free_sparse(&R_csc, cc);
 	//free(P);
 	cholmod_l_finish(cc);
@@ -205,7 +221,7 @@ PyObject* wrap_qr(PyObject* self, PyObject* args)
 	long *A_row, *A_col, *b_row;
 	double *A_data, *b_data;
 	PyObject *res;
-	PyListObject *R_row, *R_col, *R_data,
+	PyListObject *R_indptr, *R_indices, *R_data,//*R_row, *R_col, *R_data,
 				 *Z_row, *Z_col, *Z_data;
 
 	if (!PyArg_ParseTuple(args, "OOOllOO",
@@ -242,12 +258,12 @@ PyObject* wrap_qr(PyObject* self, PyObject* args)
 
 	//PyArg_Parse(tmp, "i", &nnz); tmp->ob_item[0]
 
-	qr(A_data, A_row, A_col, (size_t)A_nnz, (size_t)A_m, (size_t)A_n, b_data, b_row, (size_t)b_nnz, &Z_data, &Z_row, &Z_col, &R_data, &R_row, &R_col);
+	qr(A_data, A_row, A_col, (size_t)A_nnz, (size_t)A_m, (size_t)A_n, b_data, b_row, (size_t)b_nnz, &Z_data, &Z_row, &Z_col, &R_data, &R_indptr, &R_indices);
 
 	//fprintf(stderr, "%p\n", R_col);
 
 	res = Py_BuildValue("OOOOOO", Z_data, Z_row, Z_col,
-								R_data, R_row, R_col);
+								R_data, R_indptr, R_indices);
 	//Py_DECREF(Z_row);
 	//Py_DECREF(Z_col);
 	free(A_row);

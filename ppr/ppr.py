@@ -103,6 +103,7 @@ def W(Ad, c):
     return sparse.eye(Ad.shape[0]) - (1-c)*Ad
 
 def QR(w, pt, d):
+    # TODO why?????????
     w = w.tocoo()
     #print sparse.coo_matrix((d.data, (map(lambda x: pt[x], d.row), [0]*d.nnz))).todense()
     import spqr_wrapper
@@ -110,28 +111,33 @@ def QR(w, pt, d):
     # PO if we pass w as csc_matrix , we could avoid 2 transforms
     # g: O(|Q|)
     Z_data, Z_row, Z_col,\
-    R_data, R_row, R_col =\
+    R_data, R_indptr, R_indices =\
     spqr_wrapper.qr(w.data.tolist(),
                     w.row.tolist(),
                     w.col.tolist(),
                     w.shape[0], w.shape[1],
                     d.data.tolist(), d.row.tolist())
-    #g = sparse.coo_matrix((Z_data, (Z_row, Z_col)), shape=(w.shape[0], 1))
-
     # TODO May not support directed-graph
     g = numpy.zeros(w.shape[0])
     for d, r in itertools.izip(Z_data, Z_row):
         g[r] = d
-    R = sparse.coo_matrix((R_data, (R_row, R_col)), shape=w.shape)
+    R = sparse.csc_matrix((numpy.array(R_data),
+                           numpy.array(R_indices),
+                           numpy.array(R_indptr)), shape=w.shape)
     return g, R
 
 # R_rev: csr_matrix
-def exact(R_rev, c, g, u):
+def exact(Rt, c, g, u):
     # Shared by exact and upper_bound
     global exact_id1, ub_id1
     exact_i = 0
+    '''
     for i in xrange(R_rev.indptr[u], R_rev.indptr[u+1]):
         exact_i += c * R_rev.data[u] * g[R_rev.indices[u]]
+    '''
+    Rri = step_inverse(Rt, u)
+    for i, d in enumerate(Rri):
+        exact_i += c * d * g[i]
     exact_id1 = exact_i
     return exact_i
 
@@ -147,6 +153,38 @@ def upper_bound(u, lbu, sum_lb, n):
     ub_id1 = ubi
     return ubi
 
+'''
+def RevR(R):
+    rev = dict()
+    for c in xrange(1, R.shape[1]):
+        for yi in xrange(R.indptr[c], R.indptr[c+1]):
+            y = R.indices[yi]
+            for xi in xrange(R.indptr[c]-1, R.indptr[c-1], -1):
+                x = R.indices[xi]
+                if x <= y:
+                    break
+                rev.setdefault(y, dict())[xi]
+'''
+
+# TODO there must be a standard function
+def belong(i, l, r):
+    return i < r and i >= l
+# Only adapt to upper-triangle sparse matrix R, csc
+# Rt: transpose of R, lower-triangle, csr
+# row: num of the requested row of the inverse of A
+def step_inverse(Rt, row):
+    m = Rt.shape[0]
+    rr = numpy.zeros(m)
+    for i, (r, peekr) in enumerate(itertools.izip(Rt.indptr, Rt.indptr[1:]-1)):
+        # Assume that the main diagnal are all one
+        s = 0.0
+        for x in xrange(r, peekr):
+            s += rr[Rt.indices[x]] * Rt.data[x]
+        if row == i:
+            rr[i] = 1 - s
+        else:
+            rr[i] = 0 - s
+    return rr
 
 def top_k(lb, g, R, n, K, theta):
     # O(n)
@@ -159,7 +197,8 @@ def top_k(lb, g, R, n, K, theta):
     relevance = [(0, k) for k in xrange(K)]
     heapq.heapify(relevance)
     # TODO it's too slow!!!!!!!!!!!!!
-    R_rev = linalg.inv(R).tocsr()
+    #R_rev = RevR(R)
+    R_transpose = R.transpose()
     t_sum = 0
     for i in xrange(n):
         # O(n)
@@ -173,7 +212,7 @@ def top_k(lb, g, R, n, K, theta):
             # O(|Q|+|F|)
             # TODO When calc exactness, F=cPtR-1 not F=cR-1
             t1 = time.time()
-            relevance_u = exact(R_rev, c, g, u)
+            relevance_u = exact(R_transpose, c, g, u)
             t2 = time.time()
             t_sum += t2-t1
             #print u, lbu, ubu, relevance_u
@@ -292,40 +331,57 @@ class Loader:
         return sparse.coo_matrix((data, (row, col)))
 
 
-    def load_test(self, day):
+    def load_test(self, days):
+        test = dict()
         db_dir = 'experiments'
-        data_file = '{}/watch_day{}.pkl.gz'.format(db_dir, day)
-        events = pickle.load(gzip.open(data_file, 'r'))
-        for d in events:
-            u = d['actor']
-            v = d['repo']
+        for day in days:
+            data_file = '{}/watch_day{}.pkl.gz'.format(db_dir, day)
+            events = pickle.load(gzip.open(data_file, 'r'))
+            for e in events:
+                u = d['actor']
+                v = d['repo']
 
-            # Using integer as dict index is faster
-            u = self.hash_put(u, Loader.ACTOR)
-            v = self.hash_put(v, Loader.REPO)
+                # Using integer as dict index is faster
+                u = self.hash_put(u, Loader.ACTOR)
+                v = self.hash_put(v, Loader.REPO)
 
-            if u not in self._test:
-                self._test[u] = set()
-            self._test[u].add(v)
+                test[u].setdefault(set()).add(v)
+        return test
+
+
+class Checker(object):
+
+    def __init__(self, d, recommendation, test):
+        self._d = d
+        self._recommendation = recommendation
+        self._test = test
+
+    # TODO recall ratio
+    def check(self):
+        predicted = 0
+        for r, c in itertools.izip(self._recommendation.row, self._recommendation.col):
+            if u in self._test and c in self._test[u]:
+                predicted += 1
+        precision = float(predicted) / self._recommendation.nnz
+
 
 def load_data():
     loader = Loader()
-    A = loader.load_train(xrange(7))
+    A = loader.load_train([1,2,3])
+    test = loader.load_train([7])
     h = loader.hash
     r_h = loader.re_hash
     return A, h, r_h
 
 
 if __name__ == '__main__':
-    '''
     A = sparse.coo_matrix([
         [0, 0, 0, 1],
         [0, 0, 0, 0],
         [0, 1, 0, 0],
         [0, 0.5, 0.5, 0]]
     )
-    '''
-    A, h, r_h = load_data()
+    #A, h, r_h = load_data()
     c = 0.2
     d = sparse.coo_matrix([[0.9], [0], [0], [0.1]])
     topks = pagerank(A, c, d)
