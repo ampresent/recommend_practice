@@ -4,6 +4,7 @@
 # TODO Remove getrow and getcol
 # TODO Reevanluating P's time complexity
 # TODO Kinda strange because Aij seems reverseing( Like Aji) in the origin paper
+# TODO suffix array for x that b[0:i] are all ones
 
 import math
 import gzip
@@ -13,7 +14,7 @@ import itertools
 import heapq
 import numpy
 from scipy import sparse
-from scipy.sparse import linalg
+
 
 # A: csc
 # count_row & count_col can be changed
@@ -35,7 +36,7 @@ def P(A_csc, count_row, count_col):
             visited.add(v)
     # O(1)
             p.append(v)
-            #count_row[v] = 0
+            # count_row[v] = 0
             for ui in xrange(A_csc.indptr[v], A_csc.indptr[v+1]):
                 u = A_csc.indices[ui]
                 count_row[u] -= 1
@@ -47,6 +48,7 @@ def P(A_csc, count_row, count_col):
         pt[pi] = i
     return p, pt
 
+
 """
 A : adjacent matrix
 doesn't sacrifice time complexity,
@@ -55,6 +57,8 @@ because replace list with binomial tree
 
 d : seeds set
 """
+
+
 def lower_bound(A_csc, d, c):
     # O(n)
     #lb = dict(itertools.izip(d.row, d.data * c))
@@ -89,6 +93,7 @@ def lower_bound(A_csc, d, c):
 exact_id1 = None
 ub_id1 = None
 
+
 def AD(A, pt):
     # TODO A.row , no need to tolist()
     # O(n)
@@ -98,14 +103,16 @@ def AD(A, pt):
     xd = A.data
     return sparse.coo_matrix((xd, (id, jd)), shape=A.shape)
 
+
 def W(Ad, c):
     # O(m+n)
     return sparse.eye(Ad.shape[0]) - (1-c)*Ad
 
+
 def QR(w, pt, d):
     # TODO why?????????
     w = w.tocoo()
-    #print sparse.coo_matrix((d.data, (map(lambda x: pt[x], d.row), [0]*d.nnz))).todense()
+    # print sparse.coo_matrix((d.data, (map(lambda x: pt[x], d.row), [0]*d.nnz))).todense()
     import spqr_wrapper
     # NC ASSUME it's optical
     # PO if we pass w as csc_matrix , we could avoid 2 transforms
@@ -126,20 +133,25 @@ def QR(w, pt, d):
                            numpy.array(R_indptr)), shape=w.shape)
     return g, R
 
+
 # R_rev: csr_matrix
 def exact(Rt, c, g, u):
     # Shared by exact and upper_bound
-    global exact_id1, ub_id1
+    global exact_id1
     exact_i = 0
     '''
     for i in xrange(R_rev.indptr[u], R_rev.indptr[u+1]):
         exact_i += c * R_rev.data[u] * g[R_rev.indices[u]]
     '''
+    '''
     Rri = step_inverse(Rt, u)
     for i, d in enumerate(Rri):
         exact_i += c * d * g[i]
+    '''
+    exact_i = c * step_inverse(Rt, u, g)
     exact_id1 = exact_i
     return exact_i
+
 
 def upper_bound(u, lbu, sum_lb, n):
     # Shared by exact and upper_bound
@@ -166,27 +178,55 @@ def RevR(R):
                 rev.setdefault(y, dict())[xi]
 '''
 
+
 # TODO there must be a standard function
 def belong(i, l, r):
     return i < r and i >= l
 # Only adapt to upper-triangle sparse matrix R, csc
 # Rt: transpose of R, lower-triangle, csr
 # row: num of the requested row of the inverse of A
+
+
 def step_inverse(Rt, row):
     m = Rt.shape[0]
     rr = numpy.zeros(m)
-    for i, (r, peekr) in enumerate(itertools.izip(Rt.indptr, Rt.indptr[1:]-1)):
+    # TODO Rt.indptr[1:] is to slow
+    r_i = iter(Rt.indptr)
+    peekr_i = iter(Rt.indptr)
+    peekr_i.next()
+
+    for i in xrange(Rt.shape[0]):
         # Assume that the main diagnal are all one
         s = 0.0
-        for x in xrange(r, peekr):
+        r = r_i.next()
+        peekr = peekr_i.next()
+        for x in xrange(r, peekr-1):
             s += rr[Rt.indices[x]] * Rt.data[x]
         if row == i:
-            rr[i] = 1 - s
+            rr[i] = (1 - s)/Rt.data[peekr-1]
         else:
-            rr[i] = 0 - s
+            rr[i] = (0 - s)/Rt.data[peekr-1]
     return rr
 
-def top_k(lb, g, R, n, K, theta):
+
+# R: csc_matrix
+def F(R, g, c, p):
+    R_csr = R.tocsr()
+    f = numpy.zeros(R_csr.shape[0])
+    r_i = iter(R_csr.indptr[::-1])
+    r = r_i.next()
+    i = R_csr.shape[0] - 1
+    for peekr in r_i:
+        s = 0
+        for x in xrange(r-1, peekr, -1):
+            s += f[p[R_csr.indices[x]]]/c * R_csr.data[x]
+        f[p[i]] = c * (g[i] - s)/R_csr.data[peekr]
+        r = peekr
+        i -= 1
+    return f
+
+
+def top_k(lb, g, R, n, K, theta, c, p):
     # O(n)
     sum_lb = sum(lb)
     heaplb = [(-b, a) for a, b in enumerate(lb)]
@@ -198,7 +238,17 @@ def top_k(lb, g, R, n, K, theta):
     heapq.heapify(relevance)
     # TODO it's too slow!!!!!!!!!!!!!
     #R_rev = RevR(R)
-    R_transpose = R.transpose()
+    #R_transpose = R.transpose()
+
+    f = F(R, g, c, p)
+
+    result = []
+    for i, fi in enumerate(f):
+        result.append((fi, i))
+    print sorted(result, reverse=True)[0:6]
+    exit(0)
+
+    ok_sum = 0
     t_sum = 0
     for i in xrange(n):
         # O(n)
@@ -209,12 +259,14 @@ def top_k(lb, g, R, n, K, theta):
         if ubu < theta:
             return list(relevance)
         else:
+            ok_sum += 1
             # O(|Q|+|F|)
             # TODO When calc exactness, F=cPtR-1 not F=cR-1
             t1 = time.time()
             relevance_u = exact(R_transpose, c, g, u)
             t2 = time.time()
-            t_sum += t2-t1
+            if relevance_u == 0:
+                t_sum += t2-t1
             #print u, lbu, ubu, relevance_u
             #print 'u=%d, li=%lf, ui=%lf, ei=%lf\n' % (u, lbu, ubu, relevance_u)
             if relevance_u > theta:
@@ -241,6 +293,7 @@ def count_row_col(a):
         count_col[j] += 1
     return count_row, count_col
 
+
 # A: coo_matrix
 # d: coo_matrix
 def pagerank(A, c, d):
@@ -254,8 +307,9 @@ def pagerank(A, c, d):
     g, R = QR(w, pt, d)
     Ad_csc = Ad.tocsc()
     lb = lower_bound(Ad_csc, d, c)
-    res = top_k(lb, g, R, Ad.shape[0], 3, 0.0)
+    res = top_k(lb, g, R, Ad.shape[0], 3, 0.0, 0.2, p)
     return res
+
 
 class Loader:
     ACTOR = 0
@@ -271,13 +325,13 @@ class Loader:
     def hash_put(self, u, hash_type):
         if u not in self.hash:
             if hash_type == Loader.ACTOR:
-                self._hash_count += 1
                 self.hash[u] = self._hash_count
                 self.re_hash[self._hash_count] = u
+                self._hash_count += 1
             elif hash_type == Loader.REPO:
-                self._hash_count += 1
                 self.hash[u] = self._hash_count
                 self.re_hash[self._hash_count] = u
+                self._hash_count += 1
         return self.hash[u]
 
     def load_train(self, days):
@@ -300,15 +354,13 @@ class Loader:
             for e in events:
                 u = e['actor']
                 v = e['repo']
-                '''
-                print u, '-->', v
-                '''
+                #print u, '-->', v
                 u = self.hash_put(u, Loader.ACTOR)
                 v = self.hash_put(v, Loader.REPO)
                 row.append(u)
+                col.append(v)
                 row.append(v)
                 col.append(u)
-                col.append(v)
 
                 if self._weighting == 'time':
                     # Happening time
@@ -316,7 +368,7 @@ class Loader:
                     # Gaussian distribution
                     w = coefficient * math.exp(-(x-mu)*(x-mu)/(2.0*theta*theta))
                 elif self._weighting == 'norm':
-                    w = 1
+                    w = 1.0
 
                 # TODO THE bidirected edge should have 2 different weight. At least normalized !!!!!!!!!
                 data.append(w)
@@ -329,7 +381,6 @@ class Loader:
         for i, r in enumerate(row):
             data[i] /= sum[r]
         return sparse.coo_matrix((data, (row, col)))
-
 
     def load_test(self, days):
         test = dict()
@@ -367,22 +418,35 @@ class Checker(object):
 
 def load_data():
     loader = Loader()
-    A = loader.load_train([1,2,3])
-    test = loader.load_train([7])
+    A = loader.load_train([0,1])
+    #test = loader.load_train([7])
     h = loader.hash
     r_h = loader.re_hash
     return A, h, r_h
 
 
 if __name__ == '__main__':
+    '''
     A = sparse.coo_matrix([
-        [0, 0, 0, 1],
-        [0, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0.5, 0.5, 0]]
+        [0, 0.5, 0, 0.5, 0],
+        [1, 0, 0, 0, 0],
+        [0, 0, 0, 0.5, 0.5],
+        [0.5, 0, 0.5, 0, 0],
+        [0, 0, 1, 0, 0]
+        ]
     )
-    #A, h, r_h = load_data()
+    '''
+    A, h, r_h = load_data()
+
+    '''
+    with open('/tmp/data', 'w') as f:
+        f.write(','.join(map(str,list(A.data))))
+    with open('/tmp/row', 'w') as f:
+        f.write(','.join(map(str,list(A.row))))
+    with open('/tmp/col', 'w') as f:
+        f.write(','.join(map(str,list(A.col))))
+    '''
     c = 0.2
-    d = sparse.coo_matrix([[0.9], [0], [0], [0.1]])
+    d = sparse.coo_matrix(([1], ([1], [0])), shape=(A.shape[0], 1))
     topks = pagerank(A, c, d)
     print topks
